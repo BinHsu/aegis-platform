@@ -81,7 +81,7 @@ variable "workloads" {
 variable "project_tag" {
   description = "Value of the Project tag applied to all resources."
   type        = string
-  default     = "aegis-stateless"
+  default     = "aegis-platform"
 }
 
 variable "cost_center_tag" {

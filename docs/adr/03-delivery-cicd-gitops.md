@@ -28,14 +28,17 @@ bootstrap and the DR drill.
 `refs/heads/main`, so a PR branch cannot assume it. No static AWS keys.
 
 **Per-cluster ArgoCD.** Each EKS cluster runs its own ArgoCD, installed by
-`modules/regional-stack`, with one `Application` pointing at this repo's
-`k8s/overlays/prod/`. No `ApplicationSet`, no cross-cluster RBAC, no
-`argocd cluster add` — hub-spoke would make the hub a single point of failure
-and a cross-cluster blast radius.
+`modules/regional-stack`, with one `Application` per workload — each pointing at
+that workload's deploy repo (`k8s/overlays/prod/`). The workload set is data
+(`workloads.auto.tfvars.json`): one entry per deploy repo, fanned out by
+`for_each`. No `ApplicationSet`, no cross-cluster RBAC, no `argocd cluster add`
+— hub-spoke would make the hub a single point of failure and a cross-cluster
+blast radius.
 
-The image flow closes the loop: the sibling `aegis-greeter` repo's CI builds
-the container, pushes it to ECR, and commits the image-tag bump to
-`k8s/overlays/prod/kustomization.yaml`; ArgoCD reconciles the change.
+The image flow closes the loop: a workload's application repo (e.g.
+`aegis-greeter`) builds the container in CI, pushes it to ECR, and commits the
+image-tag bump to its deploy repo's `k8s/overlays/prod/kustomization.yaml`;
+ArgoCD reconciles the change.
 
 ## Consequences
 

@@ -48,8 +48,8 @@ deliberate, documented choice for the take-home.
 
 ### IAM apply role is `AdministratorAccess`
 
-`aegis-stateless-apply` (the CI apply role) carries `AdministratorAccess`. Its
-*trust* is tight — only `repo:BinHsu/aegis-stateless:ref:refs/heads/main` — but
+`aegis-platform-apply` (the CI apply role) carries `AdministratorAccess`. Its
+*trust* is tight — only `repo:BinHsu/aegis-platform:ref:refs/heads/main` — but
 its *permissions* are broad.
 
 - **Production**: a bespoke least-privilege policy enumerating exactly the
@@ -180,7 +180,7 @@ which the anonymization policy forbids in a committed manifest.
 
 ## DNS
 
-The Route 53 hosted zone (`aegis-stateless.test`) is a placeholder — no real
+The Route 53 hosted zone (`aegis-platform.test`) is a placeholder — no real
 domain is registered. `.test` is an RFC 6761 special-use TLD: reserved for
 testing and guaranteed never to be delegated on the public internet, so the
 zone cannot collide with a real domain. (`example.com` would seem the obvious
@@ -188,7 +188,7 @@ placeholder but AWS Route 53 explicitly rejects it as reserved.)
 
 external-dns *is* deployed (ADR-05) — it watches the greeter Ingress and
 reconciles the per-region Route 53 latency records; the records resolve and
-fail over, evidenced in [`evidence/dns-failover.md`](evidence/dns-failover.md).
+fail over by the latency policy's health-check evaluation.
 What is deferred is only the **real domain**: against a `.test` zone,
 resolution works only by querying the zone's nameservers directly
 (`dig @<assigned-nameserver>`), because `.test` has no public delegation.

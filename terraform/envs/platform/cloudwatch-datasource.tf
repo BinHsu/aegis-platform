@@ -76,7 +76,7 @@ data "aws_iam_policy_document" "grafana_cloudwatch_read" {
 resource "aws_iam_role" "grafana_cloudwatch" {
   count = var.enable_cloudwatch_datasource ? 1 : 0
 
-  name               = "aegis-stateless-grafana-cloudwatch"
+  name               = "aegis-platform-grafana-cloudwatch"
   assume_role_policy = data.aws_iam_policy_document.grafana_cloudwatch_trust[0].json
 }
 
@@ -92,7 +92,7 @@ resource "grafana_data_source" "cloudwatch" {
   count = var.enable_cloudwatch_datasource ? 1 : 0
 
   type = "cloudwatch"
-  name = "aegis-stateless-cloudwatch"
+  name = "aegis-platform-cloudwatch"
 
   # authType "grafana_assume_role" — Grafana Cloud's managed assume-role
   # provider: GC's backend (account grafana_cloud_aws_account_id) assumes

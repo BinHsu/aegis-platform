@@ -1,9 +1,9 @@
 {
-  "title": "aegis-stateless — infra (CloudWatch)",
-  "uid": "aegis-stateless-infra-cw",
+  "title": "aegis-platform — infra (CloudWatch)",
+  "uid": "aegis-platform-infra-cw",
   "schemaVersion": 38,
   "version": 1,
-  "tags": ["aegis-stateless", "managed-by-terraform", "cloudwatch"],
+  "tags": ["aegis-platform", "managed-by-terraform", "cloudwatch"],
   "time": { "from": "now-6h", "to": "now" },
   "refresh": "1m",
   "templating": { "list": [] },

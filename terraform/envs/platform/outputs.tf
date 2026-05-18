@@ -39,12 +39,12 @@ output "greeter_ci_role_arn" {
 }
 
 output "infra_ci_role_arn" {
-  description = "IAM role ARN assumed by aegis-stateless CI for read-only AWS (terraform plan on any branch / PR). Scoped to ReadOnlyAccess."
+  description = "IAM role ARN assumed by aegis-platform CI for read-only AWS (terraform plan on any branch / PR). Scoped to ReadOnlyAccess."
   value       = aws_iam_role.infra_ci.arn
 }
 
 output "infra_apply_role_arn" {
-  description = "IAM role ARN assumed by aegis-stateless CI for terraform apply. Trust scoped to refs/heads/main only — PRs cannot assume this role. Permissions: AdministratorAccess (least-privilege scoping is tradeoffs work)."
+  description = "IAM role ARN assumed by aegis-platform CI for terraform apply. Trust scoped to refs/heads/main only — PRs cannot assume this role. Permissions: AdministratorAccess (least-privilege scoping is tradeoffs work)."
   value       = aws_iam_role.infra_apply.arn
 }
 

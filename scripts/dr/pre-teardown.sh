@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REGION="${1:?usage: pre-teardown.sh <region>}"
-CLUSTER="aegis-stateless-${REGION}"
+CLUSTER="aegis-platform-${REGION}"
 
 if ! aws eks describe-cluster --name "$CLUSTER" --region "$REGION" >/dev/null 2>&1; then
   echo "pre-teardown: cluster $CLUSTER not found — nothing to clean, skipping."

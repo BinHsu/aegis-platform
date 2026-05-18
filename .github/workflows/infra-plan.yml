@@ -4,7 +4,7 @@ name: infra-plan
 # Plan diff is posted as a PR comment. Branch protection on `main` requires
 # the `summary` job to pass before merge.
 #
-# Role assumed: aegis-stateless-ci (ReadOnlyAccess, trust = any ref on this
+# Role assumed: aegis-platform-ci (ReadOnlyAccess, trust = any ref on this
 # repo). Cannot apply — that role is infra_apply on push-to-main only.
 
 on:

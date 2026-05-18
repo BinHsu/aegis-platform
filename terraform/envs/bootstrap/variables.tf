@@ -6,13 +6,13 @@ variable "platform_region" {
 variable "bucket_prefix" {
   description = "Prefix for the global-unique S3 state bucket. Actual name is '<bucket_prefix>-<account_id>' computed in main.tf."
   type        = string
-  default     = "aegis-stateless-tfstate"
+  default     = "aegis-platform-tfstate"
 }
 
 variable "project_tag" {
   description = "Value of the Project tag applied to all resources."
   type        = string
-  default     = "aegis-stateless"
+  default     = "aegis-platform"
 }
 
 variable "cost_center_tag" {

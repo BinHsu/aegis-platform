@@ -77,8 +77,8 @@ resource "aws_iam_role_policy" "greeter_ci" {
   policy = data.aws_iam_policy_document.greeter_ci_permissions.json
 }
 
-# ---- Role B: aegis-stateless CI plan → read-only AWS -----------------------
-# Trust = any ref/branch on aegis-stateless (PR branches included).
+# ---- Role B: aegis-platform CI plan → read-only AWS -----------------------
+# Trust = any ref/branch on aegis-platform (PR branches included).
 # Permissions = ReadOnlyAccess only (terraform plan / validate / lint).
 data "aws_iam_policy_document" "infra_ci_trust" {
   statement {
@@ -99,13 +99,13 @@ data "aws_iam_policy_document" "infra_ci_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/aegis-stateless:*"]
+      values   = ["repo:${var.github_owner}/aegis-platform:*"]
     }
   }
 }
 
 resource "aws_iam_role" "infra_ci" {
-  name               = "aegis-stateless-ci"
+  name               = "aegis-platform-ci"
   assume_role_policy = data.aws_iam_policy_document.infra_ci_trust.json
 }
 
@@ -116,7 +116,7 @@ resource "aws_iam_role_policy_attachment" "infra_ci_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
-# ---- Role C: aegis-stateless CI apply → admin scoped to main branch --------
+# ---- Role C: aegis-platform CI apply → admin scoped to main branch --------
 # Trust = ONLY pushes to refs/heads/main (PRs cannot assume this role).
 # Permissions = AdministratorAccess (production hardening = bespoke
 # least-privilege; documented in tradeoffs). Used by infra-apply.yml.
@@ -144,13 +144,13 @@ data "aws_iam_policy_document" "infra_apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/aegis-stateless:ref:refs/heads/main"]
+      values   = ["repo:${var.github_owner}/aegis-platform:ref:refs/heads/main"]
     }
   }
 }
 
 resource "aws_iam_role" "infra_apply" {
-  name               = "aegis-stateless-apply"
+  name               = "aegis-platform-apply"
   assume_role_policy = data.aws_iam_policy_document.infra_apply_trust.json
 }
 

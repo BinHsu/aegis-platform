@@ -4,7 +4,7 @@
 # alert topic).
 #tfsec:ignore:aws-sns-topic-encryption-use-cmk
 resource "aws_sns_topic" "budget_alerts" {
-  name              = "aegis-stateless-budget-alerts"
+  name              = "aegis-platform-budget-alerts"
   kms_master_key_id = "alias/aws/sns"
 }
 
@@ -15,7 +15,7 @@ resource "aws_sns_topic_subscription" "budget_alerts_email" {
 }
 
 resource "aws_budgets_budget" "monthly" {
-  name              = "aegis-stateless-monthly"
+  name              = "aegis-platform-monthly"
   budget_type       = "COST"
   limit_amount      = tostring(var.budget_hard_amount_usd)
   limit_unit        = "USD"

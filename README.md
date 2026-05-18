@@ -1,20 +1,25 @@
-# aegis-stateless
+# aegis-platform
 
-Infrastructure for a stateless HTTP greeter on AWS EKS — Terraform for the cloud
-substrate, ArgoCD for in-cluster GitOps, Grafana Cloud for observability, and a
-DR drill that rebuilds the workload from git.
+The platform tier for a fleet of Kubernetes workloads on AWS — Terraform for the
+cloud substrate, per-cluster ArgoCD for in-cluster GitOps, Grafana Cloud for
+observability, and a DR drill that rebuilds a region from git.
 
-This repository is the **infrastructure half** of a two-repo split. The
-application (a Go `net/http` greeter, its Dockerfile, and the image-publish CI)
-lives in the sibling repo `aegis-greeter`. This repo owns the AWS infrastructure,
-the Kubernetes manifests, the ArgoCD installation, and the CI/CD that ties them
-together.
+`aegis-platform` is shared infrastructure. It provisions the EKS clusters and
+runs the ArgoCD that reconciles **workload deploy repos** onto them. It owns no
+application code and no Kubernetes manifests — those live in their own repos:
+
+- **Application repos** (e.g. `aegis-greeter`) — service code, Dockerfile, and
+  the CI that builds and publishes the container image.
+- **Deploy repos** (e.g. `aegis-greeter_deploy`) — the Kubernetes manifests for
+  one workload. ArgoCD watches these.
+
+A workload is **data** here: one entry in `workloads.auto.tfvars.json` names its
+deploy repo, and ArgoCD fans out one `Application` per entry.
 
 ## Who is this for
 
 | You want to… | Start here |
 |---|---|
-| Review the submission | [`docs/SUBMISSION.md`](docs/SUBMISSION.md) — what this is, status, service-level targets |
 | Understand the architecture | [Architecture](#architecture) below, then [`docs/adr/`](docs/adr/README.md) |
 | Read the reasoning behind a decision | [`docs/adr/README.md`](docs/adr/README.md) — ADR index with a reading order per audience |
 | Stand it up from scratch | [First-time setup](#first-time-setup) below |
@@ -28,16 +33,19 @@ together.
 
 ```mermaid
 flowchart TB
-    subgraph app_repo["aegis-greeter — application repo"]
-        app["greeter.go · Dockerfile · publish.yml"]
+    subgraph app_repo["application repo · e.g. aegis-greeter"]
+        app["service code · Dockerfile · publish CI"]
     end
-    subgraph this_repo["aegis-stateless — this repo"]
-        tf["terraform/ · bootstrap / platform / regional"]
+    subgraph deploy_repo["deploy repo · e.g. aegis-greeter_deploy"]
         kust["k8s/overlays/prod/kustomization.yaml"]
+    end
+    subgraph this_repo["aegis-platform — this repo"]
+        tf["terraform/ · bootstrap / platform / regional"]
+        wl["workloads.auto.tfvars.json"]
         argocd["ArgoCD · per cluster"]
     end
     subgraph aws["AWS · per region"]
-        eks["EKS — greeter Deployment + Grafana Alloy DaemonSet"]
+        eks["EKS — workload Deployments + Grafana Alloy DaemonSet"]
         ecr[("ECR")]
         cw["CloudWatch · audit side-effect"]
     end
@@ -46,6 +54,7 @@ flowchart TB
     app -->|build + push image| ecr
     app -->|commit image-tag bump| kust
     tf -->|provisions| eks
+    wl -->|one Application per workload| argocd
     kust --> argocd
     argocd -->|syncs| eks
     ecr -.image.-> eks
@@ -57,13 +66,17 @@ flowchart TB
   backend), `platform` (slow lifecycle — Route 53, ECR, OIDC, budgets, Grafana
   dashboards), `regional` (fast lifecycle — VPC + EKS + ArgoCD + Alloy, applied
   once per region).
-- **Multi-region topology as data** — the region set is data (`regions.auto.tfvars.json`),
-  not code. Adding a region is a one-line data change; an external loop
-  (Makefile / GitHub Actions matrix) applies `regional` once per region with
-  per-region state isolation.
+- **Multi-region topology as data** — the region set is data
+  (`regions.auto.tfvars.json`), not code. Adding a region is a one-line data
+  change; an external loop (Makefile / GitHub Actions matrix) applies `regional`
+  once per region with per-region state isolation.
+- **Workloads as data** — `workloads.auto.tfvars.json` lists the deploy repos.
+  Each cluster's ArgoCD gets one `Application` per workload, fanned out by
+  `for_each`. Adding a workload is a one-entry data change — no Terraform edits.
 - **ArgoCD per cluster** — each EKS cluster runs its own ArgoCD, eliminating a
-  GitOps-layer single point of failure.
-- **Observability** — the app emits OpenTelemetry + Pyroscope to a node-local
+  GitOps-layer single point of failure. Each workload's deploy repo is read via
+  its own scoped, read-only SSH deploy key.
+- **Observability** — workloads emit OpenTelemetry + Pyroscope to a node-local
   Grafana Alloy DaemonSet, which forwards to Grafana Cloud. CloudWatch is kept
   only for EKS control-plane logs + ALB access logs (audit side-effect).
 
@@ -73,21 +86,19 @@ See [`docs/adr/`](docs/adr/README.md) for the reasoning behind each decision and
 ## Repository layout
 
 ```
-regions.auto.tfvars.json   Single source of truth — platform_region + regions{}
+regions.auto.tfvars.json    Region topology — platform_region + regions{}
+workloads.auto.tfvars.json  Workload set — one entry per deploy repo
 terraform/
-  envs/bootstrap/          S3 state bucket (local state, one-shot)
-  envs/platform/           Route 53, ECR, OIDC, budget, SSM, Grafana, branch protection
-  envs/regional/           VPC + EKS + ArgoCD + Alloy — applied once per region
-  modules/regional-stack/  The per-region stack, invoked by envs/regional/
-k8s/
-  base/                    Kustomize base — namespace, deployment, service, ingress, hpa
-  overlays/prod/           Image tag bumped by the aegis-greeter CI
-grafana/dashboards/        Dashboard JSON, applied by the grafana/grafana TF provider
-.github/workflows/         infra-plan, infra-apply, infra-ops
-docs/adr/                  Architecture Decision Records
-docs/tradeoffs.md          Deferred work + production-hardening path
-Makefile                   Local dev + emergency apply (CI is the canonical path)
-scripts/install-tools.sh   Pinned project-local toolchain → ./bin/
+  envs/bootstrap/           S3 state bucket (local state, one-shot)
+  envs/platform/            Route 53, ECR, OIDC, budget, SSM, Grafana, branch protection
+  envs/regional/            VPC + EKS + ArgoCD + Alloy — applied once per region
+  modules/regional-stack/   The per-region stack, invoked by envs/regional/
+grafana/dashboards/         Dashboard JSON, applied by the grafana/grafana TF provider
+.github/workflows/          infra-plan, infra-apply, infra-ops
+docs/adr/                   Architecture Decision Records
+docs/tradeoffs.md           Deferred work + production-hardening path
+Makefile                    Local dev + emergency apply (CI is the canonical path)
+scripts/install-tools.sh    Pinned project-local toolchain → ./bin/
 ```
 
 ## Prerequisites
@@ -97,7 +108,7 @@ scripts/install-tools.sh   Pinned project-local toolchain → ./bin/
 - `terraform` ≥ 1.11 (`.terraform-version` pins 1.14.8 for `tfenv`/`tenv`).
 - `make`, `git`, `bash`, `aws` CLI, `kubectl`, `gh` (GitHub CLI — used to set
   the Actions secrets/variables during setup). All other tools (tflint, tfsec,
-  kubeconform, jq, kustomize, gitleaks) install into `./bin/` via `make dev-setup`.
+  jq, gitleaks) install into `./bin/` via `make dev-setup`.
 
 ## First-time setup
 
@@ -106,8 +117,7 @@ so the foundation is bootstrapped once from an operator's machine; CI takes over
 after that.
 
 ```bash
-# 1. Project-local toolchain → ./bin/  (tflint, tfsec, kubeconform, hadolint,
-#    jq, kustomize, gitleaks) + wire the pre-commit hook.
+# 1. Project-local toolchain → ./bin/ + wire the pre-commit hook.
 make dev-setup
 
 # 2. Fill in secrets (templates ship as *.example):
@@ -120,18 +130,21 @@ cp terraform/envs/regional/secrets.auto.tfvars.example terraform/envs/regional/s
 #      platform_region — where the Terraform state bucket and the slow-
 #        lifecycle platform layer live (ECR, OIDC, Route 53, budget, SSM).
 #        Set once; it is also the state-bucket region.
-#      regions{}       — which region(s) the workload (VPC + EKS + ArgoCD)
-#        deploys to. eu-central-1 and eu-west-1 both ship `enabled: true`;
-#        flip a region's `enabled` flag to add or drop one.
+#      regions{}       — which region(s) the clusters deploy to. eu-central-1
+#        and eu-west-1 both ship `enabled: true`; flip a region's `enabled`
+#        flag to add or drop one.
 
-# 4. Create the remote state backend (local state, one-shot).
+# 4. Pick the workloads — workloads.auto.tfvars.json lists the deploy repos
+#    ArgoCD reconciles. One entry per workload; adding one is a data change.
+
+# 5. Create the remote state backend (local state, one-shot).
 export AWS_PROFILE=<your-profile>
 make bootstrap
 
-# 5. Apply the slow-lifecycle platform env.
+# 6. Apply the slow-lifecycle platform env.
 make platform
 
-# 6. Apply the workload, looping over every enabled region.
+# 7. Apply the clusters, looping over every enabled region.
 make regional
 ```
 
@@ -142,36 +155,32 @@ After `make platform`, capture its outputs and finish the CI wiring:
 # commands live in terraform/envs/platform/README.md (each value is piped from
 # `terraform output`, so nothing is typed by hand).
 
-# GitHub Actions repo variables for the sibling app repo, from platform outputs:
+# GitHub Actions repo variables for an application repo, from platform outputs:
 gh variable set ECR_REPO_URL  -b "$(terraform -chdir=terraform/envs/platform output -raw ecr_repository_url)"  --repo BinHsu/aegis-greeter
 gh variable set ECR_REGISTRY  -b "$(terraform -chdir=terraform/envs/platform output -raw ecr_registry)"        --repo BinHsu/aegis-greeter
 gh variable set OIDC_ROLE_ARN -b "$(terraform -chdir=terraform/envs/platform output -raw greeter_ci_role_arn)" --repo BinHsu/aegis-greeter
 gh variable set AWS_REGION    -b "$(terraform -chdir=terraform/envs/platform output -raw aws_region)"          --repo BinHsu/aegis-greeter
 
 # Flip the CI bootstrap gate — infra-plan/infra-apply plan/apply jobs un-skip.
-gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-stateless
+gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform
 ```
 
-### Publish the first application image — cross-repo step
+### Publish the first workload image — cross-repo step
 
-`make regional` brings up the cluster and ArgoCD, but the greeter Deployment
-references an image that does not exist yet — its pods sit in
-`ImagePullBackOff` until the **sibling `aegis-greeter` repo** publishes one.
-That repo's `publish.yml` builds the image, pushes it to the ECR repository
-provisioned here, and commits the image-tag bump back to
-`k8s/overlays/prod/kustomization.yaml`. Trigger it by pushing to `aegis-greeter`'s
-`main` (it needs the four repo variables set above). ArgoCD then reconciles the
-new tag and the greeter pods reach `Running`.
+`make regional` brings up the cluster and ArgoCD, but a workload's Deployment
+references an image that does not exist yet — its pods sit in `ImagePullBackOff`
+until the workload's **application repo** publishes one. That repo's CI builds
+the image, pushes it to the ECR repository provisioned here, and commits the
+image-tag bump to its **deploy repo's** `k8s/overlays/prod/kustomization.yaml`.
+ArgoCD then reconciles the new tag and the pods reach `Running`.
 
 ### Verify
 
 ```bash
-aws eks update-kubeconfig --name aegis-stateless-eu-central-1 --region eu-central-1
-kubectl get pods -n greeter       # greeter pods 1/1 Running (not ImagePullBackOff)
-kubectl get pods -n argocd        # ArgoCD healthy
-kubectl get pods -n monitoring    # Alloy + node-exporter + kube-state-metrics
-kubectl -n greeter port-forward svc/aegis-greeter 8080:80 &
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/healthz   # 200
+aws eks update-kubeconfig --name aegis-platform-eu-central-1 --region eu-central-1
+kubectl get applications -n argocd   # one Application per workload, Synced + Healthy
+kubectl get pods -n argocd           # ArgoCD healthy
+kubectl get pods -n monitoring       # Alloy + node-exporter + kube-state-metrics
 ```
 
 From here, every push to `main` runs `infra-plan` (PR) / `infra-apply`
@@ -212,7 +221,7 @@ Full breakdown — itemised rates, the interval math, and the levers pulled — 
 
 ## DR drill
 
-The drill proves the workload is reconstructible from git — Terraform state is
+The drill proves a workload is reconstructible from git — Terraform state is
 the source of truth, ArgoCD converges the cluster from zero. The failure-mode
 matrix, RTO/RPO targets, and the full procedure are in
 [`docs/dr-plan.md`](docs/dr-plan.md).
@@ -231,24 +240,24 @@ Or step through it manually:
 # dashboards) is untouched; other regions, if any, stay alive.
 make destroy-region REGION=eu-central-1
 
-# Rebuild it. EKS cold-provisioning dominates — the drill measured 11m 21s.
+# Rebuild it. EKS cold-provisioning dominates the cycle.
 make regional-one REGION=eu-central-1
 
-# Verify the workload reconverged from git.
-kubectl get pods -n greeter
+# Verify the workloads reconverged from git.
+kubectl get applications -n argocd
 ```
 
 Or run it through GitHub Actions: the `infra-ops` workflow (`workflow_dispatch`)
 exposes `destroy-region` as an operator-triggered, audit-logged operation.
 
-Measured cold-rebuild RTO (2026-05-17 drill): **11m 21s** — Terraform re-apply
-11m 3s + ArgoCD reconverge 18 s, region-down to greeter pods Ready. ~20-30 min
-is the conservative budget; EKS control-plane provisioning is the variable
-bottleneck. See [ADR-05](docs/adr/05-disaster-recovery.md).
+The **cold-rebuild RTO target is ~20–30 min** — region down to workload pods
+Ready. The Terraform re-apply dominates (EKS control-plane provisioning is the
+variable bottleneck); the ArgoCD reconverge that follows is negligible. See
+[ADR-05](docs/adr/05-disaster-recovery.md) for the attribution.
 
 ## Observability
 
-The app emits metrics, traces, logs, and continuous profiles via OpenTelemetry +
+Workloads emit metrics, traces, logs, and continuous profiles via OpenTelemetry +
 Pyroscope to a node-local Grafana Alloy DaemonSet, which forwards to Grafana
 Cloud. Dashboards and alert rules are declared in Terraform
 (`terraform/envs/platform/grafana.tf` + `grafana/dashboards/`) — no manual UI
@@ -272,7 +281,7 @@ sum by (pod) (count_over_time(
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `infra-plan` | PR / push to `main` | fmt, validate, tflint, tfsec, kubeconform, gitleaks, `terraform plan` per env; posts the plan diff as a PR comment |
+| `infra-plan` | PR / push to `main` | fmt, validate, tflint, tfsec, gitleaks, `terraform plan` per env; posts the plan diff as a PR comment |
 | `infra-apply` | push to `main` | `terraform apply` per env (platform + regional matrix) |
 | `infra-ops` | `workflow_dispatch` | `bootstrap` / `destroy-region` / `destroy-platform` (the DR drill) |
 

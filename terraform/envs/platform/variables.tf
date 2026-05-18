@@ -19,7 +19,7 @@ variable "platform_region" {
 variable "dns_zone_name" {
   description = "DNS zone name for the Route 53 hosted zone. Placeholder under the .test TLD (RFC 6761 — reserved for testing, never delegated on the public internet, so it cannot collide with a real domain). AWS Route 53 rejects 'example.com' (RFC 2606, AWS-reserved); .test is accepted. DNS is demonstrated via 'dig @<assigned-ns>'."
   type        = string
-  default     = "aegis-stateless.test"
+  default     = "aegis-platform.test"
 }
 
 variable "ecr_repository_name" {
@@ -118,7 +118,7 @@ variable "budget_hard_amount_usd" {
 
 # ---- GitHub OIDC -----------------------------------------------------------
 variable "github_owner" {
-  description = "GitHub org/user that owns the aegis-greeter + aegis-stateless repos. Used for the github TF provider + OIDC trust policies."
+  description = "GitHub org/user that owns the aegis-greeter + aegis-platform repos. Used for the github TF provider + OIDC trust policies."
   type        = string
   default     = "BinHsu"
 }
@@ -159,7 +159,7 @@ variable "github_token" {
 variable "project_tag" {
   description = "Value of the Project tag applied to all resources."
   type        = string
-  default     = "aegis-stateless"
+  default     = "aegis-platform"
 }
 
 variable "cost_center_tag" {

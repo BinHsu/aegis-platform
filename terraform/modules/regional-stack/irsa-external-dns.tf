@@ -2,7 +2,7 @@ module "irsa_external_dns" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.44"
 
-  role_name = "aegis-stateless-external-dns-${var.region}"
+  role_name = "aegis-platform-external-dns-${var.region}"
 
   # Built-in external-dns policy, scoped to the one hosted zone — the
   # zone-wildcard default would let external-dns write any zone in the

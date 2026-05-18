@@ -6,7 +6,7 @@ provider "aws" {
       Project    = var.project_tag
       Env        = "platform"
       ManagedBy  = "terraform"
-      Repo       = "github.com/BinHsu/aegis-stateless"
+      Repo       = "github.com/BinHsu/aegis-platform"
       CostCenter = var.cost_center_tag
     }
   }

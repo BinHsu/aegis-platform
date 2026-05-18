@@ -31,7 +31,7 @@ Where to get each value:
 | `grafana_cloud_{mimir,loki,tempo,pyroscope}_url` | Grafana Cloud → Connections → each backend's "Send …" page — the push/ingest URL |
 | `grafana_cloud_{mimir,loki,tempo,pyroscope}_username` | Same pages — each backend has its own instance-ID username (they differ) |
 | `budget_alert_email` | Operator-controlled email address (AWS Budget + Grafana alert routing both use it) |
-| `github_token` | GitHub fine-grained PAT with `admin:public_key` on the aegis-stateless repo (regional-stack registers one deploy key per region via this) |
+| `github_token` | GitHub fine-grained PAT with `admin:public_key` on the aegis-platform repo (regional-stack registers one deploy key per region via this) |
 
 All marked `sensitive = true` in `variables.tf`; not echoed in `terraform plan` output.
 
@@ -40,26 +40,26 @@ All marked `sensitive = true` in `variables.tf`; not echoed in `terraform plan` 
 `infra-plan.yml` and `infra-apply.yml` read equivalent values from GH Actions secrets. Set once per repo:
 
 ```bash
-gh secret set GRAFANA_CLOUD_API_TOKEN              -b "glc_..."            --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_AUTH_TOKEN                   -b "glsa_..."           --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_MIMIR_USERNAME     -b "<mimir-instance-id>"     --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_LOKI_USERNAME      -b "<loki-instance-id>"      --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_TEMPO_USERNAME     -b "<tempo-instance-id>"     --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_PYROSCOPE_USERNAME -b "<pyroscope-instance-id>" --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_MIMIR_URL              -b "https://prometheus-prod-XX-..."  --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_LOKI_URL               -b "https://logs-prod-XXX-..."       --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_TEMPO_URL              -b "https://tempo-prod-XX-..."       --repo BinHsu/aegis-stateless
-gh secret set GRAFANA_CLOUD_PYROSCOPE_URL          -b "https://profiles-prod-XXX-..."   --repo BinHsu/aegis-stateless
-gh secret set BUDGET_ALERT_EMAIL                   -b "ops@example.com"    --repo BinHsu/aegis-stateless
-gh secret set GH_DEPLOY_KEY_PAT                    -b "github_pat_..."     --repo BinHsu/aegis-stateless
+gh secret set GRAFANA_CLOUD_API_TOKEN              -b "glc_..."            --repo BinHsu/aegis-platform
+gh secret set GRAFANA_AUTH_TOKEN                   -b "glsa_..."           --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_MIMIR_USERNAME     -b "<mimir-instance-id>"     --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_LOKI_USERNAME      -b "<loki-instance-id>"      --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_TEMPO_USERNAME     -b "<tempo-instance-id>"     --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_PYROSCOPE_USERNAME -b "<pyroscope-instance-id>" --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_MIMIR_URL              -b "https://prometheus-prod-XX-..."  --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_LOKI_URL               -b "https://logs-prod-XXX-..."       --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_TEMPO_URL              -b "https://tempo-prod-XX-..."       --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_PYROSCOPE_URL          -b "https://profiles-prod-XXX-..."   --repo BinHsu/aegis-platform
+gh secret set BUDGET_ALERT_EMAIL                   -b "ops@example.com"    --repo BinHsu/aegis-platform
+gh secret set GH_DEPLOY_KEY_PAT                    -b "github_pat_..."     --repo BinHsu/aegis-platform
 
 # Set after running `make bootstrap` once (capture from `terraform output`):
-gh secret set TFSTATE_BUCKET                       -b "aegis-stateless-tfstate-<acct-id>" --repo BinHsu/aegis-stateless
-gh secret set TFSTATE_REGION                       -b "eu-central-1"       --repo BinHsu/aegis-stateless
+gh secret set TFSTATE_BUCKET                       -b "aegis-platform-tfstate-<acct-id>" --repo BinHsu/aegis-platform
+gh secret set TFSTATE_REGION                       -b "eu-central-1"       --repo BinHsu/aegis-platform
 
 # Set after applying platform once (capture from `terraform output`):
-gh secret set AWS_INFRA_CI_ROLE_ARN                -b "arn:aws:iam::<acct>:role/aegis-stateless-ci"    --repo BinHsu/aegis-stateless
-gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/aegis-stateless-apply" --repo BinHsu/aegis-stateless
+gh secret set AWS_INFRA_CI_ROLE_ARN                -b "arn:aws:iam::<acct>:role/aegis-platform-ci"    --repo BinHsu/aegis-platform
+gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/aegis-platform-apply" --repo BinHsu/aegis-platform
 ```
 
 ## CI bootstrap gate — `BOOTSTRAP_COMPLETE`
@@ -69,7 +69,7 @@ gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/
 After the operator has run `make bootstrap` + `make platform` locally (so the roles + OIDC provider exist) and set all the secrets above:
 
 ```bash
-gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-stateless
+gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform
 ```
 
 From then on, `infra-plan` plans and `infra-apply` applies on every push to `main`. Before it, only `gitleaks` + `fmt/validate/lint/sec` + k8s-manifest validation run (and pass) — the plan/apply jobs show as `skipped`.

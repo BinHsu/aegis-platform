@@ -22,7 +22,7 @@ REGION="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-CLUSTER="aegis-stateless-${REGION}"
+CLUSTER="aegis-platform-${REGION}"
 EVIDENCE_DIR="docs/evidence"
 REPORT="${EVIDENCE_DIR}/DR_REPORT.md"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -53,7 +53,7 @@ probe_survivors() {
   while :; do
     for pair in $SURVIVOR_ALBS; do
       code="$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
-        -H 'Host: greeter.aegis-stateless.test' \
+        -H 'Host: greeter.aegis-platform.test' \
         "http://${pair##*|}/healthz" 2>/dev/null || echo ERR)"
       echo "$(ts) ${pair%%|*} ${code}" >> "$PROBE_LOG"
     done
@@ -78,7 +78,7 @@ build_failover_section() {
   printf 'losing one does not affect another. DNS-level failover — Route 53\n'
   printf 'latency records with evaluate-target-health drop the drilled region'"'"'s\n'
   printf 'record when its ALB is gone — is verifiable from an operator machine\n'
-  printf 'with `dig @<zone-nameserver> greeter.aegis-stateless.test`.\n'
+  printf 'with `dig @<zone-nameserver> greeter.aegis-platform.test`.\n'
 }
 
 # ---- phase 0 — baseline ---------------------------------------------------
@@ -91,7 +91,7 @@ echo "baseline OK — greeter readyReplicas=$ready"
 
 # Resolve each surviving region's greeter ALB for the failover probe.
 for s in $SURVIVORS; do
-  aws eks update-kubeconfig --name "aegis-stateless-$s" --region "$s" --alias "$s" >/dev/null
+  aws eks update-kubeconfig --name "aegis-platform-$s" --region "$s" --alias "$s" >/dev/null
   host="$(kubectl --context "$s" get ingress aegis-greeter -n greeter \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
   if [ -n "$host" ]; then
