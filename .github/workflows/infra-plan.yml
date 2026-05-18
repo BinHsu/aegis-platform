@@ -65,7 +65,7 @@ jobs:
         with:
           terraform_version: 1.14.8
           terraform_wrapper: false
-      - name: install project-local tools (tflint / tfsec / kubeconform / hadolint)
+      - name: install project-local tools (tflint / tfsec / jq / gitleaks)
         run: ./scripts/install-tools.sh "$PWD/bin"
       - name: fmt-check
         run: terraform fmt -recursive -check terraform/

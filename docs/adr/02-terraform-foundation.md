@@ -9,8 +9,8 @@ Accepted.
 Two foundation choices precede any infrastructure. **State locking** — the
 conventional S3 remote backend pairs the state bucket with a DynamoDB table for
 locking: a second resource to provision, tag, and pay for. **Tooling** — the
-repo needs `terraform`, `tflint`, `tfsec`, `kubeconform`, `hadolint`, `jq`,
-`kustomize`, `gitleaks`; installing those onto the host (`brew install …`)
+repo needs `terraform`, `tflint`, `tfsec`, `jq`, `gitleaks`; installing those
+onto the host (`brew install …`)
 drifts versions between contributors and CI and pollutes a reviewer's machine
 when they clone to evaluate.
 
@@ -43,8 +43,5 @@ every root module pins `required_version` and provider versions, and
 - The CI plan jobs run `terraform plan -lock=false`: the read-only plan IAM
   role cannot write the `.tflock` object, and a plan does not mutate state, so
   the lock is unnecessary there. Apply jobs (write role) lock normally.
-- One platform gap: `hadolint` has no native darwin/arm64 build and segfaults
-  under Rosetta, so it is skipped on Apple Silicon — the Linux CI runner covers
-  Dockerfile linting.
 - Cost: a bespoke install script to maintain instead of a one-line `brew`.
   Accepted — reviewer reproducibility outweighs it.

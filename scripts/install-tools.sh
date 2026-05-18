@@ -3,14 +3,20 @@
 #
 # Fetches pinned dev tools into a project-local bin directory (default ./bin/).
 # Per "Host isolation discipline": this script never touches /usr/local, never
-# touches ~/.terraform.d/plugins, and never uses sudo. Reviewer can clone +
+# touches ~/.terraform.d/plugins, and never uses sudo. A forker can clone +
 # `make dev-setup` without conflicting with their existing toolchain.
 #
 # Per inherited safety guardrail (h): each binary is fetched from its upstream
 # GitHub release and SHA256-verified against the release's published checksums
-# file before being placed in $BIN. Hardening path (not implemented for the
-# take-home scope): cosign / GPG signature verification of the checksums file
-# itself; see docs/tradeoffs.md once written.
+# file before being placed in $BIN. Hardening path (not implemented for this
+# scope): cosign / GPG signature verification of the checksums file itself;
+# see docs/tradeoffs.md.
+#
+# aegis-platform is the platform tier — Terraform + CI only. It carries no
+# Kubernetes manifests (those live in the per-workload deploy repos) and no
+# Dockerfile, so the toolchain is tflint / tfsec / jq / gitleaks. It does not
+# install kubeconform / kustomize (manifest validation belongs in the deploy
+# repos) or hadolint (no Dockerfile here).
 #
 # Usage: ./scripts/install-tools.sh [BIN_DIR]
 #   defaults to $PWD/bin
@@ -23,11 +29,8 @@ mkdir -p "$BIN"
 # ---- pinned versions -------------------------------------------------------
 TFLINT_VERSION=v0.53.0
 TFSEC_VERSION=v1.28.11
-KUBECONFORM_VERSION=v0.6.7
-HADOLINT_VERSION=v2.12.0
 JQ_VERSION=1.7.1
-GITLEAKS_VERSION=8.18.4
-KUSTOMIZE_VERSION=5.4.3
+GITLEAKS_VERSION=8.24.3
 
 # ---- OS / arch detection ---------------------------------------------------
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')   # darwin | linux
@@ -37,26 +40,6 @@ case "$ARCH" in
   arm64|aarch64) ARCH=arm64 ;;
   *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
 esac
-
-# Hadolint asset names use CapitalCase OS and x86_64/arm64 arch.
-# Known platform constraint: hadolint v2.12.0 ships no native Darwin/arm64
-# binary, and the Darwin/x86_64 build segfaults under Rosetta 2 on Apple
-# Silicon (reproduced). We therefore skip the local install on darwin/arm64
-# and rely on the Linux runner in CI (where Linux/arm64 + Linux/x86_64 builds
-# work natively). Local Dockerfile linting on darwin/arm64 falls back to:
-#     docker run --rm -i hadolint/hadolint < Dockerfile
-case "$OS" in
-  darwin) HADOLINT_OS=Darwin ;;
-  linux)  HADOLINT_OS=Linux ;;
-esac
-case "$ARCH" in
-  amd64) HADOLINT_ARCH=x86_64 ;;
-  arm64) HADOLINT_ARCH=arm64 ;;
-esac
-SKIP_HADOLINT=false
-if [ "$OS" = "darwin" ] && [ "$ARCH" = "arm64" ]; then
-  SKIP_HADOLINT=true
-fi
 
 # ---- tmp workdir, auto-cleanup --------------------------------------------
 TMP=$(mktemp -d)
@@ -99,35 +82,6 @@ verify_sha256 "$TFSEC_BIN" tfsec_checksums.txt
 mv "$TFSEC_BIN" "$BIN/tfsec"
 chmod +x "$BIN/tfsec"
 
-# ---- kubeconform -----------------------------------------------------------
-echo ">>> kubeconform ${KUBECONFORM_VERSION} (${OS}/${ARCH})"
-KUBECONFORM_TGZ="kubeconform-${OS}-${ARCH}.tar.gz"
-curl -fsSL -o "$KUBECONFORM_TGZ" \
-  "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/${KUBECONFORM_TGZ}"
-curl -fsSL -o CHECKSUMS \
-  "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/CHECKSUMS"
-verify_sha256 "$KUBECONFORM_TGZ" CHECKSUMS
-tar -xzf "$KUBECONFORM_TGZ" -C "$BIN" kubeconform
-chmod +x "$BIN/kubeconform"
-
-# ---- hadolint --------------------------------------------------------------
-if [ "$SKIP_HADOLINT" = "true" ]; then
-  echo ">>> hadolint SKIPPED on darwin/arm64 (no native build, Rosetta segfaults)"
-  echo "    local Dockerfile lint: docker run --rm -i hadolint/hadolint < Dockerfile"
-  echo "    CI (Linux runner) installs the native build via this same script"
-else
-  echo ">>> hadolint ${HADOLINT_VERSION} (${HADOLINT_OS}/${HADOLINT_ARCH})"
-  HADOLINT_BIN="hadolint-${HADOLINT_OS}-${HADOLINT_ARCH}"
-  curl -fsSL -o "$HADOLINT_BIN" \
-    "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/${HADOLINT_BIN}"
-  curl -fsSL -o "${HADOLINT_BIN}.sha256" \
-    "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/${HADOLINT_BIN}.sha256"
-  # hadolint's .sha256 file is single-line "<sha>  <filename>"; feed directly.
-  shasum -a 256 -c "${HADOLINT_BIN}.sha256"
-  mv "$HADOLINT_BIN" "$BIN/hadolint"
-  chmod +x "$BIN/hadolint"
-fi
-
 # ---- jq -------------------------------------------------------------------
 # Used by Makefile + GH Actions workflows to parse regions.auto.tfvars.json
 # (single source of truth for region topology). jq's release assets use a
@@ -147,9 +101,9 @@ mv "$JQ_BIN" "$BIN/jq"
 chmod +x "$BIN/jq"
 
 # ---- gitleaks --------------------------------------------------------------
-# Secret scanner — used by the pre-commit hook (.githooks/pre-commit) and
-# the gitleaks CI job. Asset naming: gitleaks_<ver>_<os>_<arch>.tar.gz,
-# arch token is x64 (not amd64) / arm64.
+# Secret scanner — used by the pre-commit hook (.githooks/pre-commit). The
+# infra-plan CI job pins the same version. Asset naming:
+# gitleaks_<ver>_<os>_<arch>.tar.gz, arch token is x64 (not amd64) / arm64.
 echo ">>> gitleaks ${GITLEAKS_VERSION} (${OS}/${ARCH})"
 case "$ARCH" in
   amd64) GITLEAKS_ARCH=x64 ;;
@@ -163,21 +117,6 @@ curl -fsSL -o gitleaks_checksums.txt \
 verify_sha256 "$GITLEAKS_TGZ" gitleaks_checksums.txt
 tar -xzf "$GITLEAKS_TGZ" -C "$BIN" gitleaks
 chmod +x "$BIN/gitleaks"
-
-# ---- kustomize -------------------------------------------------------------
-# Renders k8s/overlays/prod for kubeconform validation (CI + local). Used
-# instead of `kubectl kustomize` to keep the toolchain project-local (no
-# host kubectl dependency). Release tag form: kustomize/vX.Y.Z; asset
-# kustomize_vX.Y.Z_<os>_<arch>.tar.gz.
-echo ">>> kustomize ${KUSTOMIZE_VERSION} (${OS}/${ARCH})"
-KUSTOMIZE_TGZ="kustomize_v${KUSTOMIZE_VERSION}_${OS}_${ARCH}.tar.gz"
-curl -fsSL -o "$KUSTOMIZE_TGZ" \
-  "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/${KUSTOMIZE_TGZ}"
-curl -fsSL -o kustomize_checksums.txt \
-  "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/checksums.txt"
-verify_sha256 "$KUSTOMIZE_TGZ" kustomize_checksums.txt
-tar -xzf "$KUSTOMIZE_TGZ" -C "$BIN" kustomize
-chmod +x "$BIN/kustomize"
 
 # ---- done -----------------------------------------------------------------
 echo
