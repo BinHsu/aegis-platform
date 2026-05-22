@@ -21,6 +21,8 @@ signal, not ceremony.
 | [ADR-04](04-observability.md) | Observability | OpenTelemetry + Alloy → Grafana Cloud; free-tier cardinality discipline (keep-list before `remote_write`); pull vs ingest; recording rules. |
 | [ADR-05](05-disaster-recovery.md) | Disaster recovery | RPO N/A (stateless by design); a ~20–30 min cold-rebuild RTO target, attributed; the drill cycle + cross-region failover. |
 | [ADR-06](06-security-and-runtime.md) | Security & runtime | IRSA, OIDC, EKS access entries, scoped deploy keys; PodSecurity `restricted`; secrets kept out of git. |
+| [ADR-07](07-workload-self-ownership.md) | Workload self-ownership | *Accepted.* Continues the boundary discipline of ADR-01 + ADR-03 (and ldz ADR-017): application catalog moves to `ApplicationSet` with an SCM-provider generator; workload IAM moves to ACK CRDs in each deploy repo; guardrails (AppProject, Kyverno trust-subject, org SCP) are the precondition. |
+| [ADR-08](08-cluster-multi-tenancy.md) | Cluster multi-tenancy | *Accepted.* Shared cluster by default (namespace + NetworkPolicy + Kyverno); dedicated Karpenter NodePool as first escape hatch; dedicated cluster via a paved `modules/dedicated-cluster/` as second; the platform contract is invariant across isolation tiers. |
 
 ## Reading order by audience
 
