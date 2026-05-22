@@ -109,7 +109,7 @@ workload regardless of which tier it runs in:
 |---|---|---|
 | **(a) Cluster baseline** | One reusable module installs the controller set: ALB controller, external-dns, Karpenter, the ArgoCD agent, the observability agents. The shared cluster *consumes* this module; `modules/dedicated-cluster/` *composes the same* module. | Same controllers present, same versions, same defaults. |
 | **(b) Observability** | Same OTel endpoint convention, same log format, same metric naming (`aegis_*` namespaces per Rule 11). | Telemetry lands in the same backends with the same shape. |
-| **(c) Identity / IAM** | Same IRSA / Pod-Identity wiring and the same ACK pattern (workload declares `Role`/`Policy` CRDs; Kyverno enforces trust-subject↔namespace per ADR-07). | IAM is declared the same way; the permission boundary (ldz ADR-014/015) caps it the same way. |
+| **(c) Identity / IAM** | Same IRSA / Pod-Identity wiring and the same ACK pattern (workload declares `Role`/`Policy` CRDs; Kyverno enforces trust-subject↔namespace per ADR-07). | IAM is declared the same way; the org-level `deny-iam-privilege-escalation` SCP (ldz ADR-015) caps escalation the same way. |
 | **(d) GitOps** | Same `ApplicationSet` reconcile model — discovery by `aegis-workload` topic, the same `AppProject` allowlist semantics. | The deploy repo's `Application` CR works unchanged. |
 | **(e) Secrets / networking** | Same External Secrets convention; the same ingress / egress idioms (NetworkPolicy default-deny, ALB ingress class). | Secrets and traffic are wired the same way. |
 

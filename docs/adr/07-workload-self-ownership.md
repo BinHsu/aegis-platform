@@ -23,11 +23,12 @@ the landing-zone tier below it:
    workload ArgoCD knows about. Adding a workload is a one-line JSON change,
    but the change still lands as a PR *in the platform repo*. That keeps the
    platform team on the critical path for every onboard.
-2. **Workload IAM** — the engine's IRSA role
-   (`aegis-staging-aegis-engine`, trust subject
-   `system:serviceaccount:aegis-core:aegis-core-engine`) is declared in
-   `aegis-aws-landing-zone`. The account-fabric tier owns a per-workload trust
-   policy, which means a workload's identity scope is a cross-repo change.
+2. **Workload IAM** — `aegis-core-deploy`'s engine ServiceAccount carries a
+   role-arn annotation pointing at `aegis-staging-aegis-engine` (trust subject
+   `system:serviceaccount:aegis-core:aegis-core-engine`), but that role was
+   **never actually provisioned** in `aegis-aws-landing-zone`'s Terraform — it
+   is a dangling reference. The open question is whether the fabric tier should
+   own per-workload IAM at all; today it owns neither a working role nor should.
 
 Both arrangements work; both leak the workload upward. The same argument that
 moved manifests into deploy repos applies here: the boundary should follow the
@@ -36,10 +37,12 @@ unit of ownership.
 This boundary is the workload-tier end of a lineage the sibling repo already
 recorded: **[ldz ADR-017](https://github.com/BinHsu/aegis-aws-landing-zone/blob/main/docs/decisions/017-platform-tier-extraction.md)**
 descoped the landing zone to account-fabric-only and extracted the platform
-tier into this repo. ldz ADR-017's own consequence — "workload IRSA roles leave
-the landing zone per aegis-platform ADR-07" — forward-references this ADR. This
-ADR is the consumer-side half of that decision: the per-workload role the fabric
-no longer owns moves into the workload's deploy repo.
+tier into this repo. ldz ADR-017's own consequence — "per-workload IRSA roles
+do not live in the landing zone; they are provisioned by the workload per
+aegis-platform ADR-07" — forward-references this ADR. This ADR is the
+consumer-side half of that decision: the per-workload role the fabric does not
+own is *created* in the workload's deploy repo (not migrated — there is no
+working fabric role to migrate).
 
 Timing matters. The platform tier and every regional stack are currently
 destroyed (cost — only `bootstrap` + `platform` state survive between drills).
@@ -70,10 +73,11 @@ a conventional path (e.g. `k8s/base/iam/`). The platform tier installs the
 ACK IAM controller as a paved-road service, alongside ArgoCD, Alloy, the ALB
 controller, and external-dns. The landing-zone tier's role narrows to OIDC
 provider trust anchor only — it issues the IAM identity primitive; the
-workload picks the trust subject. The existing
-`aegis-staging-aegis-engine` role is destroyed in the landing-zone tier and
-re-provisioned by ACK CRDs in `aegis-core-deploy` with the same trust
-subject.
+workload picks the trust subject. The `aegis-staging-aegis-engine` role the
+engine ServiceAccount references was never actually provisioned in the landing
+zone (a dangling role-arn annotation); ACK *creates* it in `aegis-core-deploy`
+with the same trust subject, reconciling the dangling reference. Nothing is
+destroyed in the landing-zone tier — there is no working role there to destroy.
 
 ## Enforcement is the safety floor — guardrails precede dev-ownership
 
@@ -95,12 +99,15 @@ non-automatable tier closes the residual gap:
    CRD whose trust subject does not name the same namespace the CRD lives in.
    `aegis-greeter`'s deploy repo cannot declare an IAM role that trusts
    `system:serviceaccount:aegis-core:...`.
-3. **IAM Permission Boundary** ([ldz ADR-014](https://github.com/BinHsu/aegis-aws-landing-zone/blob/main/docs/decisions/014-iam-permission-scope-down.md)
-   / [ADR-015](https://github.com/BinHsu/aegis-aws-landing-zone/blob/main/docs/decisions/015-permission-boundary-hardening.md))
-   — over-privilege cap. The fabric-level boundary ceilings what *any* workload
-   IAM the ACK controller provisions can grant itself, regardless of what the
-   deploy repo writes. The fabric keeps this boundary even though the per-role
-   declaration moves out (ldz ADR-017).
+3. **Org-level SCP `deny-iam-privilege-escalation`** ([ldz ADR-015](https://github.com/BinHsu/aegis-aws-landing-zone/blob/main/docs/decisions/015-permission-boundary-hardening.md),
+   `management/scps`) — escalation ceiling. ADR-015 §A2 *rejected* per-role
+   permission boundaries (a role can drop its own boundary) and put the wall at
+   the SCP layer, which member-account roles cannot self-modify. The SCP denies
+   IAM-mutating actions org-wide except an allow-list. **Consequence for this
+   ADR: the ACK IAM controller role must join that allow-list** (a scoped
+   carve-out, exactly like the existing `*-karpenter-controller` entry) or it
+   cannot `iam:CreateRole` from the CRDs at all. The carve-out is what lets ACK
+   work while the SCP still blocks escalation-to-Admin — see roll-forward step 4.
 4. **Least-privilege review (non-automatable tier)** — in the current
    solo-operator model, the operator reviewing the ACK-CRD PR. This is the one
    tier no policy engine fully replaces; it catches "technically within the
@@ -222,6 +229,10 @@ down the fabric's now-orphaned role.
 3. **`aegis-core-deploy`** — the **second consumer**, applying the now-proven
    interface to the engine: `argocd/application.yaml` +
    `k8s/base/iam/aegis-core-engine-role.yaml`, same `aegis-workload` topic.
-4. **`aegis-aws-landing-zone`** — destroy `aegis-staging-aegis-engine`; narrow
-   the tier's role to the OIDC provider trust anchor + permission boundary only,
-   completing the ldz ADR-017 descope from the workload side.
+4. **`aegis-aws-landing-zone`** — add the ACK IAM controller role to the
+   `deny-iam-privilege-escalation` SCP allow-list (scoped carve-out, like the
+   Karpenter entry) so ACK can provision workload roles; then reconcile the
+   dangling `aegis-staging-aegis-engine` role-arn annotation (point the engine
+   SA at the ACK-created role, or drop the annotation). There is no per-workload
+   role here to destroy — the fabric keeps only the OIDC trust anchor + the
+   org-level SCPs, completing the ldz ADR-017 descope from the workload side.
