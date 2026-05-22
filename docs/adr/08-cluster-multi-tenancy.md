@@ -1,3 +1,5 @@
+<!-- session-close-review: abstraction-trigger — re-count workload archetypes; if ≥2 share a resource-combination shape and no XRD exists, evaluate abstracting. Cheap stand-in for agent cross-session context loss; superseded by Backstage template inheritance when that arrives. -->
+
 # ADR-08: Cluster multi-tenancy — shared by default, dedicated by exception via a platform module
 
 ## Status
@@ -24,6 +26,15 @@ Two postures are easy to slide into without an explicit decision:
   policies, ad-hoc Karpenter configs) within one release.
 
 The right answer is neither — a default with a named, paved escape hatch.
+
+This decision sits on the same lineage as ADR-07: [ADR-01](01-architecture-and-topology.md)
+drew the lifecycle / blast-radius line inside this repo, [ADR-03](03-delivery-cicd-gitops.md)
+established per-cluster ArgoCD + deploy repos, and
+[ldz ADR-017](https://github.com/BinHsu/aegis-aws-landing-zone/blob/main/docs/decisions/017-platform-tier-extraction.md)
+descoped the landing zone to account-fabric-only so this platform tier owns the
+cluster question outright. Where ADR-07 fixed *what a workload owns*, this ADR
+fixes *where it runs* — and, more importantly below, the **contract** the
+platform must hold constant no matter where it runs.
 
 ## Decision
 
@@ -79,6 +90,113 @@ A workload that promotes to a dedicated NodePool stays inside this repo's
 ArgoCD and observability wiring. A workload that promotes to a dedicated
 cluster runs its own `modules/dedicated-cluster/` apply, but inherits the
 same baseline.
+
+## The invariant contract — the same platform across isolation tiers
+
+The escape hatches above are only safe if the platform exposes the **same
+contract** across every isolation tier. If a dedicated cluster offered a
+*different* interface than the shared cluster, dedicated-by-exception would
+silently become a second platform — and platform-as-product would break, because
+the workload now has to learn two systems and the platform team has to maintain
+two. The thing held constant across tiers is not the *mechanism* (that shifts);
+it is the **contract**.
+
+The contract has five **dimensions** — these are coordinate axes for reasoning
+about parity, *not* a prescriptive spec. Each dimension must read the same to a
+workload regardless of which tier it runs in:
+
+| Dimension | The invariant | What the workload sees the same |
+|---|---|---|
+| **(a) Cluster baseline** | One reusable module installs the controller set: ALB controller, external-dns, Karpenter, the ArgoCD agent, the observability agents. The shared cluster *consumes* this module; `modules/dedicated-cluster/` *composes the same* module. | Same controllers present, same versions, same defaults. |
+| **(b) Observability** | Same OTel endpoint convention, same log format, same metric naming (`aegis_*` namespaces per Rule 11). | Telemetry lands in the same backends with the same shape. |
+| **(c) Identity / IAM** | Same IRSA / Pod-Identity wiring and the same ACK pattern (workload declares `Role`/`Policy` CRDs; Kyverno enforces trust-subject↔namespace per ADR-07). | IAM is declared the same way; the permission boundary (ldz ADR-014/015) caps it the same way. |
+| **(d) GitOps** | Same `ApplicationSet` reconcile model — discovery by `aegis-workload` topic, the same `AppProject` allowlist semantics. | The deploy repo's `Application` CR works unchanged. |
+| **(e) Secrets / networking** | Same External Secrets convention; the same ingress / egress idioms (NetworkPolicy default-deny, ALB ingress class). | Secrets and traffic are wired the same way. |
+
+**The mechanism shifts by tier; the invariant holds because of how it shifts:**
+
+- **Shared cluster** — the workload's interface is a **CRD interface**: it
+  declares namespace-scoped resources (Kustomize overlay, ACK CRDs, NetworkPolicy)
+  and the already-installed baseline reconciles them.
+- **Dedicated cluster** — the interface is **a Terraform module to *get* a
+  cluster, THEN the same CRDs inside it**: the deploy repo invokes
+  `modules/dedicated-cluster/`, which installs the *same baseline controllers*,
+  after which the workload declares the *same* CRDs it would on the shared
+  cluster.
+
+The invariant holds **because the dedicated-cluster module installs the same
+controllers** the shared cluster runs — dimension (a) is the load-bearing one;
+(b)–(e) are guarantees that follow from a common baseline. A dedicated cluster
+is therefore "the shared platform, with the control plane pulled out", not "a
+different platform."
+
+**Grounded in greeter, not predicted enclaves.** The concrete shape of this
+contract comes bottom-up from greeter's real consumption (the first proving
+consumer, per ADR-07), *not* from a god's-eye prediction of a future
+`aegis-enclave`'s confidential-computing needs or an `aegis-statefulset`'s
+volume needs. We fix the contract those future workloads will *consume*; we do
+not pre-design their internals here (see the deferred forward-references below).
+
+## Deferred abstraction ladder — enforcement before ergonomics before UX
+
+The current control plane is **headless**: raw ACK CRDs + `ApplicationSet` + the
+platform baseline + Kyverno, with no abstraction layer above the CRDs and no
+portal UI in front of them. **This suffices today**, and it is the *right*
+current form. Higher layers are deferred, each with a named trigger:
+
+- **Crossplane XRD (the abstraction layer)** — triggers when **≥2 workloads
+  share a repeated *resource-combination shape***. The trigger is a *shape
+  match*, NOT a consumer count: greeter and core are both consumers, but they
+  are structurally dissimilar (greeter is a thin stateless service; the core
+  engine carries the model/inference resource shape). Two dissimilar consumers do
+  not justify an XRD — abstracting now would invent a composite resource neither
+  workload actually fits. **No trigger yet.**
+- **Backstage / service-catalog (the portal layer)** — triggers at
+  **navigation / discovery pain**: roughly 15–30+ services, multiple teams, OR
+  operators who refuse to touch YAML. Note that a **"free catalog" already
+  exists** with zero portal investment: the GitHub topic `aegis-workload` is the
+  inventory, the ArgoCD dashboard is the live view, and the `ApplicationSet`
+  enumerates what is reconciled. At the current handful-of-workloads scale that
+  is sufficient discovery — **no portal needed now.**
+
+The ordering principle is **enforcement (control plane) before ergonomics
+(abstraction) before UX (portal)**. The enforcement three-pack from ADR-07 is
+the floor and is already in place; abstraction and portal are conveniences that
+ride on top, and adding them before their triggers fire would be building
+ergonomics for users and shapes that do not yet exist. **A headless platform is
+the correct current form**, not an unfinished one.
+
+## Revisit triggers
+
+Re-evaluate the "abstraction deferred" stance when **any** of these becomes true
+— they are checkable, not vibes:
+
+- **≥2 structurally-similar workloads** appear (two workloads that share a
+  resource-combination shape, e.g. two stateless-service-plus-IAM-plus-ingress
+  workloads, or two model-serving workloads) → evaluate a **Crossplane XRD** for
+  the shared shape.
+- **Heavy CRD-copy at onboarding** — a new workload's deploy repo is mostly
+  copy-pasted ACK/Application/NetworkPolicy boilerplate from an existing one →
+  the repeated shape is real; evaluate an XRD.
+- **Operators complaining about YAML** — the people onboarding workloads push
+  back on hand-writing CRDs, or non-platform operators need to onboard without
+  touching YAML → that is the **portal (Backstage) trigger**, distinct from the
+  XRD trigger above.
+
+The session-close-review marker at the top of this file is the cheap
+cross-session stand-in for these triggers: re-count archetypes each session; if
+≥2 share a shape and no XRD exists, this stance is due for re-evaluation.
+
+## Deferred forward-references — anticipated future workloads
+
+`aegis-enclave` (a confidential-computing / Nitro-Enclave isolation workload)
+and `aegis-statefulset` (a persistent-volume / stateful workload) are
+**anticipated but not yet unlocked**. They are named here only as **deferred
+forward-references**: their *design* happens when they are actually unlocked, not
+now. This ADR fixes the **interface they will consume** (the five-dimension
+contract, the escape-hatch ladder) — it does not pre-design their internals.
+When they land, they consume this contract; if they reveal a repeated shape with
+an existing workload, they may *also* fire the XRD revisit trigger above.
 
 ## Considered alternatives
 
