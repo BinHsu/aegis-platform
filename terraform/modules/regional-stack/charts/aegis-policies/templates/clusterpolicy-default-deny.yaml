@@ -1,0 +1,48 @@
+# ADR-07 enforcement four-pack #4 — NetworkPolicy default-deny baseline.
+#
+# The deploy repos' manifests already ASSUME a default-deny on their namespace
+# (aegis-core-deploy's NetworkPolicies are annotated
+# `ldz-54-default-deny-allowlist` and only add allow-edges on top), but that
+# baseline was never actually built — the namespace is open today. This
+# generate policy stamps a deny-all NetworkPolicy into every workload
+# namespace at creation, making the assumed contract real. `synchronize: true`
+# means Kyverno re-creates it if a workload deletes it.
+#
+# Consequence for greeter: greeter currently has NO NetworkPolicy. Once this
+# baseline lands, greeter must ship its own allow-rules (ALB ingress, DNS +
+# egress) or it goes dark — handled in aegis-greeter-deploy.
+#
+# ⚠️ implemented, E2E PENDING platform bootstrap — "default-deny actually
+# denies un-allowed traffic" is a negative test in the issue #6 gate.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: default-deny-networkpolicy-baseline
+  annotations:
+    aegis.binhsu.org/enforcement: "four-pack-4-network-default-deny"
+    aegis.binhsu.org/status: "implemented, E2E PENDING platform bootstrap"
+spec:
+  rules:
+    - name: generate-default-deny
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+              names:
+                - {{ .Values.workloadNamespaceGlob | quote }}
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: aegis-default-deny
+        namespace: "{{ `{{request.object.metadata.name}}` }}"
+        synchronize: true
+        data:
+          metadata:
+            annotations:
+              aegis.binhsu.org/policy-rationale: "ldz-54-default-deny-baseline (platform-generated, ADR-07 four-pack #4)"
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress
+              - Egress

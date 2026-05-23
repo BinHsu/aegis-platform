@@ -44,20 +44,30 @@ variable "zone_name" {
   type        = string
 }
 
-variable "workloads" {
-  description = "Workloads ArgoCD reconciles into this cluster, keyed by Application name. Each entry names a deploy repo (one read-only deploy key registered per region) plus optional region-injection knobs. See workloads.auto.tfvars.json."
+# The workload CATALOG is gone (ADR-07): ArgoCD's ApplicationSet discovers
+# workloads by the `aegis-workload` GitHub topic, not from a map here. What
+# remains is per-workload data the SCM generator CANNOT discover — the ECR
+# registry to inject (D4 account-ID hide) and, for workloads that declare
+# workload-scoped IAM, the engine ServiceAccount + ACK role name. Keyed by
+# deploy-repo name so the ApplicationSet's Merge generator can join on it.
+# Source: gitignored registries.auto.tfvars.json (account IDs stay out of git).
+variable "workload_registries" {
+  description = "Per-workload registry + optional IRSA params the SCM generator cannot discover, keyed by deploy-repo name. ECR account IDs are sensitive (kept gitignored). engine_irsa is opt-in (greeter declares none)."
   type = map(object({
-    repo_name    = string
-    repo_url_ssh = string
-    path         = optional(string, "k8s/overlays/prod")
-    namespace    = string
-    region_env = optional(object({
-      deployment = string
-      container  = string
-      var_name   = string
+    ecr_account_id = string
+    ecr_region     = string
+    engine_irsa = optional(object({
+      service_account = string
+      role_name       = string
     }))
-    latency_ingress = optional(string)
   }))
+  default = {}
+}
+
+variable "scm_token" {
+  description = "GitHub org-read token the ArgoCD SCM-provider generator uses to enumerate aegis-workload-tagged repos. Replaces the per-workload deploy keys (deploy repos are public → anonymous clone). Needs read:org + repo metadata, NOT admin:public_key."
+  type        = string
+  sensitive   = true
 }
 
 variable "ci_role_arn" {

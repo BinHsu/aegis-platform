@@ -46,7 +46,7 @@ variable "tfstate_region" {
 
 # ---- secrets (gitignored secrets.auto.tfvars locally; GH Actions secrets in CI) ----
 variable "github_token" {
-  description = "GitHub fine-grained PAT with admin:public_key scope on every workload deploy repo (regional-stack registers one ArgoCD deploy key per repo, per region)."
+  description = "GitHub org-read PAT the ArgoCD SCM-provider generator uses to enumerate aegis-workload-tagged deploy repos. Scope: read:org + repo metadata (NOT admin:public_key — the per-workload deploy keys are gone; public repos clone anonymously)."
   type        = string
   sensitive   = true
 }
@@ -56,25 +56,25 @@ variable "operator_principal_arn" {
   type        = string
 }
 
-# ---- deploy repos (single source of truth: workloads.auto.tfvars.json) ----
-# Map of workloads ArgoCD reconciles into this region's cluster, keyed by
-# ArgoCD Application name. Passed via -var-file=workloads.auto.tfvars.json by
-# the Makefile / CI. Adding a workload = one JSON entry, zero .tf edits — the
-# same data-driven pattern regions.auto.tfvars.json uses for regions.
-variable "workloads" {
-  description = "Workloads ArgoCD reconciles into each cluster, keyed by Application name. Single source of truth: workloads.auto.tfvars.json."
+# ---- workload registries (gitignored: registries.auto.tfvars.json) --------
+# The workload CATALOG is gone — ArgoCD discovers workloads by the
+# `aegis-workload` GitHub topic (ADR-07). This map holds only what discovery
+# CANNOT supply: the ECR registry to inject (D4 account-ID hide; account IDs
+# are sensitive → gitignored) and opt-in engine IRSA params. Passed via
+# -var-file=registries.auto.tfvars.json by the Makefile / CI. Onboarding a
+# workload that uses private ECR = tag the repo (zero-PR discovery) + one
+# gitignored entry here.
+variable "workload_registries" {
+  description = "Per-workload registry + optional IRSA params, keyed by deploy-repo name. Source: gitignored registries.auto.tfvars.json."
   type = map(object({
-    repo_name    = string
-    repo_url_ssh = string
-    path         = optional(string, "k8s/overlays/prod")
-    namespace    = string
-    region_env = optional(object({
-      deployment = string
-      container  = string
-      var_name   = string
+    ecr_account_id = string
+    ecr_region     = string
+    engine_irsa = optional(object({
+      service_account = string
+      role_name       = string
     }))
-    latency_ingress = optional(string)
   }))
+  default = {}
 }
 
 # ---- tags -----------------------------------------------------------------

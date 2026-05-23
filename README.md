@@ -13,8 +13,10 @@ application code and no Kubernetes manifests — those live in their own repos:
 - **Deploy repos** (e.g. `aegis-greeter_deploy`) — the Kubernetes manifests for
   one workload. ArgoCD watches these.
 
-A workload is **data** here: one entry in `workloads.auto.tfvars.json` names its
-deploy repo, and ArgoCD fans out one `Application` per entry.
+A workload onboards itself (ADR-07): tag its deploy repo with the GitHub topic
+`aegis-workload` and ArgoCD's `ApplicationSet` discovers it — no edit to this
+repo. The platform owns the paved road (EKS, ArgoCD, ACK, Kyverno guardrails);
+each deploy repo owns its own manifests and IAM intent.
 
 ## Who is this for
 
@@ -41,8 +43,8 @@ flowchart TB
     end
     subgraph this_repo["aegis-platform — this repo"]
         tf["terraform/ · bootstrap / platform / regional"]
-        wl["workloads.auto.tfvars.json"]
-        argocd["ArgoCD · per cluster"]
+        argocd["ArgoCD ApplicationSet · per cluster"]
+        ack["ACK IAM controller · Kyverno guardrails"]
     end
     subgraph aws["AWS · per region"]
         eks["EKS — workload Deployments + Grafana Alloy DaemonSet"]
@@ -54,7 +56,7 @@ flowchart TB
     app -->|build + push image| ecr
     app -->|commit image-tag bump| kust
     tf -->|provisions| eks
-    wl -->|one Application per workload| argocd
+    argocd -->|discovers by aegis-workload topic| deploy_repo
     kust --> argocd
     argocd -->|syncs| eks
     ecr -.image.-> eks
@@ -70,12 +72,21 @@ flowchart TB
   (`regions.auto.tfvars.json`), not code. Adding a region is a one-line data
   change; an external loop (Makefile / GitHub Actions matrix) applies `regional`
   once per region with per-region state isolation.
-- **Workloads as data** — `workloads.auto.tfvars.json` lists the deploy repos.
-  Each cluster's ArgoCD gets one `Application` per workload, fanned out by
-  `for_each`. Adding a workload is a one-entry data change — no Terraform edits.
+- **Workloads discover themselves** (ADR-07) — there is no catalog. ArgoCD's
+  `ApplicationSet` (SCM-provider generator) scans the org for repos tagged
+  `aegis-workload` and reconciles each. Onboarding is: tag the deploy repo (+ one
+  gitignored `registries.auto.tfvars.json` entry if it pulls private ECR). The
+  safety floor that makes this safe to hand to a workload team is the
+  enforcement four-pack: AppProject destination-allowlist + ApplicationSet
+  namespace-derivation, Kyverno (ACK-role trust-subject↔namespace, default-deny
+  NetworkPolicy baseline), and the org-level `deny-iam-privilege-escalation` SCP.
+- **Workload IAM is self-owned** (ADR-07) — the platform installs the ACK IAM
+  controller; each deploy repo declares its own IAM as `Role`/`Policy` CRDs
+  under `k8s/base/iam/`. The platform tier no longer owns per-workload IAM.
 - **ArgoCD per cluster** — each EKS cluster runs its own ArgoCD, eliminating a
-  GitOps-layer single point of failure. Each workload's deploy repo is read via
-  its own scoped, read-only SSH deploy key.
+  GitOps-layer single point of failure. Deploy repos are public, so ArgoCD
+  clones them anonymously; one org-read token lets the SCM generator enumerate
+  them by topic (no per-workload deploy keys).
 - **Observability** — workloads emit OpenTelemetry + Pyroscope to a node-local
   Grafana Alloy DaemonSet, which forwards to Grafana Cloud. CloudWatch is kept
   only for EKS control-plane logs + ALB access logs (audit side-effect).
@@ -87,7 +98,7 @@ See [`docs/adr/`](docs/adr/README.md) for the reasoning behind each decision and
 
 ```
 regions.auto.tfvars.json    Region topology — platform_region + regions{}
-workloads.auto.tfvars.json  Workload set — one entry per deploy repo
+registries.auto.tfvars.json Per-workload ECR/IRSA params (gitignored; account IDs). NOT a catalog — discovery is by the aegis-workload topic. See *.example
 terraform/
   envs/bootstrap/           S3 state bucket (local state, one-shot)
   envs/platform/            Route 53, ECR, OIDC, budget, SSM, Grafana, branch protection
@@ -134,8 +145,11 @@ cp terraform/envs/regional/secrets.auto.tfvars.example terraform/envs/regional/s
 #        and eu-west-1 both ship `enabled: true`; flip a region's `enabled`
 #        flag to add or drop one.
 
-# 4. Pick the workloads — workloads.auto.tfvars.json lists the deploy repos
-#    ArgoCD reconciles. One entry per workload; adding one is a data change.
+# 4. Register workloads — there is no catalog. Tag each deploy repo with the
+#    GitHub topic `aegis-workload` (ArgoCD discovers it). If a workload pulls
+#    private ECR, add one entry to registries.auto.tfvars.json (copy from the
+#    *.example; gitignored, since it holds account IDs).
+cp registries.auto.tfvars.json.example registries.auto.tfvars.json  # then edit
 
 # 5. Create the remote state backend (local state, one-shot).
 export AWS_PROFILE=<your-profile>
