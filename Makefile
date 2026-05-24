@@ -16,9 +16,9 @@
 
 ROOT           := $(CURDIR)
 BIN            := $(ROOT)/bin
-TFVARS_JSON    := $(ROOT)/regions.auto.tfvars.json
-WORKLOADS_JSON := $(ROOT)/workloads.auto.tfvars.json
-BACKEND_HCL    := $(ROOT)/backend.hcl
+TFVARS_JSON     := $(ROOT)/regions.auto.tfvars.json
+REGISTRIES_JSON := $(ROOT)/registries.auto.tfvars.json
+BACKEND_HCL     := $(ROOT)/backend.hcl
 
 PATH := $(BIN):$(PATH)
 export PATH
@@ -152,7 +152,7 @@ regional-one: $(BACKEND_HCL)
 	  TF_VAR_node_instance=$$node_instance \
 	  TF_VAR_node_min=$$node_min \
 	  TF_VAR_node_max=$$node_max \
-	  terraform apply -var-file=$(WORKLOADS_JSON) $(AUTO_APPROVE)
+	  terraform apply -var-file=$(REGISTRIES_JSON) $(AUTO_APPROVE)
 
 all: bootstrap platform regional
 
@@ -185,7 +185,7 @@ destroy-region: $(BACKEND_HCL)
 	  TF_VAR_node_instance=$$node_instance \
 	  TF_VAR_node_min=$$node_min \
 	  TF_VAR_node_max=$$node_max \
-	  terraform destroy -var-file=$(WORKLOADS_JSON) $(AUTO_APPROVE)
+	  terraform destroy -var-file=$(REGISTRIES_JSON) $(AUTO_APPROVE)
 
 # Full destroy of platform (post-submission cleanup). bootstrap's bucket
 # + lock table have lifecycle prevent_destroy — operator must edit those

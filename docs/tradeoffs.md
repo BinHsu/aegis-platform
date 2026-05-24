@@ -270,3 +270,36 @@ larger setup would add:
   changes. Effort: ~0.5 day.
 - **Policy-as-code** — OPA / Conftest gating the plan output against
   organisational policy. Effort: ~1 day.
+
+---
+
+## Cloud portability — deliberately AWS-only, with the seams kept identifiable
+
+This whole stack is **AWS-only today, by design** — not by accident. The split
+matters (see [ADR-08](adr/08-cluster-multi-tenancy.md), "Multi-cloud"):
+
+- **Platform tier (`aegis-platform`) + landing zone are per-cloud by
+  construction** (VPC/EKS/IRSA/ACK/Route 53/ECR/Organizations/SCPs). Multi-cloud
+  does **not** mean making these cloud-agnostic — it means a parallel per-cloud
+  tier exposing the *same contract* (the ADR-08 five-dimension invariant). The
+  portability unit is the **contract**, not the Terraform.
+- **Workload deploy repos are mostly portable K8s**; only the *edges* are
+  AWS-bound: the ALB `Ingress` annotations (both repos), the ACM cert ARN +
+  ACK `Role` CRD + IRSA annotation (core). The intended multi-cloud workload
+  model is **overlay-per-cloud inside one deploy repo** (`overlays/prod-aws`,
+  `prod-gcp`), *not* a forked repo-per-cloud. The seam files (`ingress.yaml`,
+  `iam/`) are already isolated so that future split is mechanical.
+
+Two genuinely-newer directions we are **not** on (named so they are tracked, not
+forgotten):
+
+- **Gateway API (vs ALB-annotated `Ingress`)** — Gateway API is becoming the
+  cross-cloud ingress standard, and it is the single biggest lever for
+  decoupling both deploy repos' ingress from EKS-specific ALB annotations. At
+  the current single-cloud, two-workload scale, ALB `Ingress` is sufficient;
+  Gateway API is the first concrete step **if** multi-cloud or multi-ingress
+  ever becomes a goal. Effort: ~1–2 days per workload + the controller.
+- **EKS Auto Mode** — we run a managed node group on Spot (with Karpenter as the
+  ADR-08 escape hatch). EKS Auto Mode would hand AWS the compute/Karpenter
+  lifecycle. Managed node groups are perfectly mature; Auto Mode is a
+  convenience-vs-control trade we have not taken. Revisit if node-ops toil grows.

@@ -8,14 +8,16 @@ Invoked from `terraform/envs/regional/main.tf` via `module "stack" { for_each = 
 
 | File | Purpose |
 |---|---|
-| `versions.tf` | Pinned providers (aws / kubernetes / helm / tls / github). |
-| `variables.tf` | All inputs (region, vpc_cidr, node sizing, ECR/zone refs, GC creds, repo refs, tags). |
+| `versions.tf` | Pinned providers (aws / kubernetes / helm). |
+| `variables.tf` | All inputs (region, vpc_cidr, node sizing, zone refs, GC creds, `scm_token`, `workload_registries`, tags). |
 | `locals.tf` | Derived names (`aegis-<region>` cluster), subnet CIDR carving via `cidrsubnet`. |
 | `vpc.tf` | `terraform-aws-modules/vpc/aws` ~> 5.13. 3 AZs, public + private, single NAT (FinOps tradeoff). EKS/ELB subnet tags applied. |
 | `eks.tf` | `terraform-aws-modules/eks/aws` ~> 20.24. K8s 1.30, managed node group on Spot, all 5 control-plane log types → CW (audit side-effect per ADR-04). |
 | `irsa-alb.tf` | IRSA role for ALB controller (via the iam-role-for-service-accounts-eks submodule's built-in `attach_load_balancer_controller_policy`). |
 | `alb-controller.tf` | `aws-load-balancer-controller` Helm chart 1.8.1, SA annotated with the IRSA role. |
-| `argocd.tf` | Per-cluster ArgoCD (chart 7.6.12). ED25519 deploy key registered on the aegis-platform repo (read-only, per-region title). K8s Secret labeled `argocd.argoproj.io/secret-type=repository` so ArgoCD auto-discovers. Application CR via `argocd-apps` subchart 2.0.2 pointing at `k8s/overlays/prod`. |
+| `argocd.tf` | Per-cluster ArgoCD (chart 7.6.12) + the workload-discovery `ApplicationSet` and shared `AppProject` via `argocd-apps` subchart 2.0.2. SCM-provider generator finds repos by the `aegis-workload` topic (Merge generator joins per-workload registry/IRSA params from `workload_registries`); namespace derived from repo name; ECR registry + region injected. One org-read token in a K8s Secret — no per-workload deploy keys (deploy repos are public). ADR-07. **E2E PENDING bootstrap.** |
+| `ack-iam.tf` + `irsa-ack-iam.tf` | ACK IAM controller (iam-chart 1.3.13, ns `ack-system`) + its IRSA role `aegis-platform-ack-iam-${region}` (scoped to the `/aegis-workload/` IAM path). Lets a deploy repo declare its own IAM as `Role`/`Policy` CRDs. The role name's `aegis-platform-ack-iam-` prefix is the seam to the fabric SCP carve-out. ADR-07. **E2E PENDING bootstrap.** |
+| `kyverno.tf` + `charts/aegis-policies/` | Kyverno (chart 3.2.6) + two ClusterPolicies: ACK Role trust-subject↔namespace match (enforcement #2) and a generated default-deny NetworkPolicy baseline in every `aegis-*` namespace (enforcement #4). ADR-07. **E2E PENDING bootstrap.** |
 | `alloy.tf` + `alloy-config.river.tpl` | Grafana Alloy DaemonSet (chart 0.10.1) — scrapes node-exporter + kube-state-metrics + cAdvisor, OTLP gRPC receiver on :4317, Pyroscope receiver on :4040, Loki source from pod stdout. K8s Secret holds GC creds (sourced via SSM Parameter Store in the regional env layer, passed in as module vars). |
 | `outputs.tf` | `cluster_name` / `cluster_endpoint` / `cluster_ca_certificate` / `oidc_provider_arn` / `vpc_id`. **No `alb_dns_name`** — see note below. |
 

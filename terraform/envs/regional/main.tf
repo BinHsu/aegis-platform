@@ -9,7 +9,6 @@ module "stack" {
     aws        = aws
     kubernetes = kubernetes
     helm       = helm
-    github     = github
   }
 
   region        = var.region
@@ -18,7 +17,8 @@ module "stack" {
   node_min      = var.node_min
   node_max      = var.node_max
 
-  workloads = var.workloads
+  scm_token           = var.github_token
+  workload_registries = var.workload_registries
 
   ci_role_arn            = data.terraform_remote_state.platform.outputs.infra_ci_role_arn
   apply_role_arn         = data.terraform_remote_state.platform.outputs.infra_apply_role_arn

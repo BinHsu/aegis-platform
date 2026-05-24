@@ -150,7 +150,7 @@ variable "grafana_cloud_external_id" {
 }
 
 variable "github_token" {
-  description = "GitHub PAT for the github TF provider. Needs admin:public_key for deploy key registration (regional-stack consumes this output via remote_state)."
+  description = "GitHub PAT for the github TF provider in THIS env (github_branch_protection on aegis-platform). Needs repo admin scope. Note: the per-workload deploy keys are gone (ADR-07) — this token no longer needs admin:public_key, and regional/ takes its own org-read PAT directly, not via remote_state."
   type        = string
   sensitive   = true
 }

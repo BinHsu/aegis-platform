@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "Forker template. Copy to registries.auto.tfvars.json at the repo root",
+    "(the real file is gitignored by the *.tfvars.json rule — ECR account IDs",
+    "are sensitive and stay out of git). The Makefile / CI passes it to the",
+    "regional env via -var-file.",
+    "",
+    "This is NOT the workload catalog — ArgoCD discovers workloads by the",
+    "`aegis-workload` GitHub topic (ADR-07). This map holds only what discovery",
+    "cannot supply: the ECR registry to inject (account-ID hide) and opt-in",
+    "engine IRSA params. Onboarding a workload using private ECR = tag the repo",
+    "+ add one entry here, keyed by deploy-repo name.",
+    "",
+    "engine_irsa is OPTIONAL — declare it only for a workload whose engine",
+    "ServiceAccount needs an ACK-provisioned IAM role. The ApplicationSet",
+    "injects the role-arn annotation, building the ARN from the cluster account",
+    "(so no account ID is hardcoded in the public deploy repo). role_name must",
+    "match the path+name in the deploy repo's ACK Role CRD.",
+    "",
+    "ingress_cert is OPTIONAL — declare it for a workload with a TLS ALB",
+    "gateway. The ApplicationSet injects alb.ingress.kubernetes.io/certificate-arn",
+    "onto the named Ingress so the cert ARN (which embeds an account ID) stays",
+    "out of the public deploy repo. cert_arn must be a region-correct,",
+    "cluster-account ACM cert; a single value is single-region only (multi-region",
+    "wants a per-region lookup — E2E PENDING refinement)."
+  ],
+  "workload_registries": {
+    "aegis-greeter-deploy": {
+      "ecr_account_id": "<workload-account-id>",
+      "ecr_region": "eu-central-1"
+    },
+    "aegis-core-deploy": {
+      "ecr_account_id": "<workload-account-id>",
+      "ecr_region": "eu-central-1",
+      "engine_irsa": {
+        "service_account": "aegis-core-engine",
+        "role_name": "aegis-workload/aegis-core-engine"
+      },
+      "ingress_cert": {
+        "ingress_name": "aegis-core-gateway",
+        "cert_arn": "arn:aws:acm:<region>:<cluster-account-id>:certificate/<cert-id>"
+      }
+    }
+  }
+}

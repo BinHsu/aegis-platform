@@ -1,14 +1,24 @@
 # ArgoCD per cluster — NOT hub-spoke. Each EKS cluster runs its own ArgoCD,
 # eliminating the GitOps-layer SPOF (per locked decision: per-cluster ArgoCD).
 #
-# Multi-workload, data-driven: every entry in var.workloads gets its own
-# read-only deploy key, repository Secret, and ArgoCD Application. Adding a
-# workload is a data change in workloads.auto.tfvars.json — no edits here.
+# Self-ownership model (ADR-07): the workload catalog is no longer a JSON map
+# iterated by `for_each`. It is a QUERY — an ApplicationSet with a GitHub
+# SCM-provider generator discovers every repo tagged with the topic
+# `aegis-workload` and reconciles it. Onboarding a workload is: tag the deploy
+# repo + add a (gitignored) registry entry. Zero edits here.
 #
-# Repo authentication: one dedicated ED25519 deploy key per (workload,
-# region) pair, registered read-only on that workload's deploy repo. One key
-# unlocks exactly one repo — blast radius is a single repo, never a personal
-# account-wide PAT (per ADR-06).
+# Repo authentication (ADR-07 / decision D2): the deploy repos are PUBLIC, so
+# ArgoCD clones them anonymously over HTTPS — the per-workload ED25519 deploy
+# keys this file used to mint are GONE. The only credential left is one
+# org-read token the SCM generator uses to ENUMERATE repos by topic (the GitHub
+# API needs auth even for public repos). One token, platform-scoped, not one
+# key per workload. If a future deploy repo is private, it needs an
+# org-credential here — the public assumption is load-bearing.
+#
+# ⚠️ implemented, E2E PENDING platform bootstrap — none of the discovery /
+# isolation flow has run against a live cluster. Issue #6 gate: ApplicationSet
+# discovers BOTH aegis-workload repos + reconciles them; the AppProject blocks
+# a deliberately cross-namespace manifest.
 
 resource "kubernetes_namespace" "argocd" {
   metadata {
@@ -21,38 +31,20 @@ resource "kubernetes_namespace" "argocd" {
   }
 }
 
-# One deploy key per workload — each key is scoped to a single deploy repo.
-resource "tls_private_key" "argocd_repo" {
-  for_each  = var.workloads
-  algorithm = "ED25519"
-}
-
-resource "github_repository_deploy_key" "argocd" {
-  for_each   = var.workloads
-  title      = "argocd-${var.region}"
-  repository = each.value.repo_name
-  key        = tls_private_key.argocd_repo[each.key].public_key_openssh
-  read_only  = true
-}
-
-resource "kubernetes_secret" "argocd_repo" {
-  for_each = var.workloads
-
+# The single org-read token the SCM-provider generator uses to list repos by
+# topic. Replaces the whole per-workload deploy-key mechanism (D2).
+resource "kubernetes_secret" "scm_token" {
   metadata {
-    name      = "${each.key}-repo-${var.region}"
+    name      = "github-scm-token"
     namespace = kubernetes_namespace.argocd.metadata[0].name
     labels = {
-      # ArgoCD discovers repository secrets by this label — no separate
-      # ArgoCD repository CR needed.
-      "argocd.argoproj.io/secret-type" = "repository"
+      # ArgoCD picks up SCM credentials from labelled secrets.
+      "argocd.argoproj.io/secret-type" = "repo-creds"
     }
   }
-
   data = {
-    url           = each.value.repo_url_ssh
-    sshPrivateKey = tls_private_key.argocd_repo[each.key].private_key_openssh
+    token = var.scm_token
   }
-
   type = "Opaque"
 }
 
@@ -79,107 +71,203 @@ resource "helm_release" "argocd" {
       }
       configs = {
         params = {
-          # Disable insecure TLS-skip for repo connections — deploy key
-          # uses SSH, server side authenticated by known_hosts (auto-trust
-          # GitHub's host key for first connection).
           "controller.repo.server.timeout.seconds" = "60"
         }
       }
     })
   ]
 
-  depends_on = [kubernetes_secret.argocd_repo]
+  depends_on = [kubernetes_secret.scm_token]
 }
 
-# One ArgoCD Application per workload. Region-injection patches are applied
-# only when the workload opts in (region_env / latency_ingress) — that keeps
-# each deploy repo's overlay region-agnostic without forcing greeter's shape
-# on every workload.
+# Per-workload params the SCM generator cannot know — all ACCOUNT-bound or
+# cluster-bound (the values a public deploy repo must not hardcode):
+#   - the ECR registry to inject (account-ID hide, D4);
+#   - for workloads with IAM, the engine SA + the ARN of the ACK-provisioned
+#     role (built from the caller identity = the cluster/platform account, so
+#     no account ID lands in any public repo — it lives only in TF state + the
+#     in-cluster ApplicationSet);
+#   - for workloads with a TLS gateway, the ACM cert ARN to inject onto the
+#     Ingress (the cert ARN embeds an account ID — ⑥).
+# Region (workload INTENT, not account-bound) is deliberately NOT here — greeter
+# owns it via its own kustomize replacements off the injected region annotation.
+#
+# Every element carries every key (empty string when absent) so the
+# ApplicationSet template's `missingkey=error` stays safe while the
+# `{{- if ... }}` guards key off empty strings. engine_irsa / ingress_cert are
+# opt-in: greeter declares neither.
 locals {
-  argocd_applications = {
-    for name, w in var.workloads : name => {
-      namespace = "argocd"
-      project   = "default"
-      source = {
-        repoURL        = w.repo_url_ssh
-        path           = w.path
-        targetRevision = "HEAD"
-
-        kustomize = {
-          patches = concat(
-            # Inject this cluster's region as a container env var (greeter's
-            # HELLO_TAG — the greeting then identifies the serving region).
-            w.region_env == null ? [] : [{
-              target = { kind = "Deployment", name = w.region_env.deployment }
-              patch = yamlencode({
-                apiVersion = "apps/v1"
-                kind       = "Deployment"
-                metadata   = { name = w.region_env.deployment }
-                spec = {
-                  template = {
-                    spec = {
-                      containers = [{
-                        name = w.region_env.container
-                        env  = [{ name = w.region_env.var_name, value = var.region }]
-                      }]
-                    }
-                  }
-                }
-              })
-            }],
-            # external-dns latency routing: set-identifier + aws-region make
-            # this region's record one latency-routed member of the shared
-            # name; evaluate-target-health drops the record when the ALB is
-            # gone (region failover).
-            w.latency_ingress == null ? [] : [{
-              target = { kind = "Ingress", name = w.latency_ingress }
-              patch = yamlencode({
-                apiVersion = "networking.k8s.io/v1"
-                kind       = "Ingress"
-                metadata = {
-                  name = w.latency_ingress
-                  annotations = {
-                    "external-dns.alpha.kubernetes.io/set-identifier"             = var.region
-                    "external-dns.alpha.kubernetes.io/aws-region"                 = var.region
-                    "external-dns.alpha.kubernetes.io/aws-evaluate-target-health" = "true"
-                  }
-                }
-              })
-            }],
-          )
-        }
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = w.namespace
-      }
-      syncPolicy = {
-        automated = {
-          prune    = true
-          selfHeal = true
-        }
-        syncOptions = ["CreateNamespace=true"]
-      }
+  workload_list_elements = [
+    for repo, cfg in var.workload_registries : {
+      repository           = repo
+      ecrAccountId         = cfg.ecr_account_id
+      ecrRegion            = cfg.ecr_region
+      engineServiceAccount = try(cfg.engine_irsa.service_account, "")
+      engineRoleArn        = cfg.engine_irsa == null ? "" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${cfg.engine_irsa.role_name}"
+      ingressName          = try(cfg.ingress_cert.ingress_name, "")
+      certArn              = try(cfg.ingress_cert.cert_arn, "")
     }
-  }
+  ]
 }
 
-# Application CRs via the official argocd-apps subchart. Keeps Application
-# specs declarative + separate from the controller install (cleaner blast
-# radius for app-spec changes).
-resource "helm_release" "argocd_application" {
+# ApplicationSet + AppProject ship via the argocd-apps subchart (same reason as
+# before: declarative app-spec, separate blast radius from the controller; and
+# it sidesteps kubernetes_manifest's CRD-at-plan-time problem).
+resource "helm_release" "argocd_apps" {
   name       = "aegis-apps"
   namespace  = kubernetes_namespace.argocd.metadata[0].name
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argocd-apps"
   version    = "2.0.2" # pinned
 
-  # argocd-apps chart 2.x: `applications` is a MAP keyed by app name (1.x
-  # took a list). A list here makes the chart's range emit numeric keys →
-  # metadata.name becomes a number → "unmarshal number into string".
   values = [
     yamlencode({
-      applications = local.argocd_applications
+      # ── ENFORCEMENT FOUR-PACK #1 — namespace-squatting defense ──────────
+      # ONE shared AppProject, not one per workload. ArgoCD cannot GENERATE an
+      # AppProject from an ApplicationSet, so per-workload projects would
+      # re-introduce a platform PR per onboard — defeating self-service. The
+      # squatting wall is instead: (a) the ApplicationSet DERIVES each app's
+      # destination namespace from the repo name (a deploy repo cannot pick
+      # its own namespace — the value comes from the discovered repo, not from
+      # anything inside it), backed by (b) this project's destination allowlist
+      # (`aegis-*` only) and (c) sourceRepos pinned to the BinHsu org. Decision
+      # flagged for review.
+      projects = {
+        aegis-workloads = {
+          namespace   = "argocd"
+          description = "All aegis-workload-tagged deploy repos. Destinations locked to aegis-* namespaces; sources locked to the org. ADR-07 enforcement #1. E2E PENDING bootstrap."
+          sourceRepos = ["https://github.com/BinHsu/*"]
+          destinations = [{
+            server    = "https://kubernetes.default.svc"
+            namespace = "aegis-*"
+          }]
+          # CreateNamespace=true makes a (cluster-scoped) Namespace; ACK
+          # Role/Policy CRDs are namespaced. Allow both, scoped by the
+          # destination allowlist above.
+          clusterResourceWhitelist   = [{ group = "", kind = "Namespace" }]
+          namespaceResourceWhitelist = [{ group = "*", kind = "*" }]
+        }
+      }
+
+      applicationsets = {
+        aegis-workloads = {
+          namespace         = "argocd"
+          goTemplate        = true
+          goTemplateOptions = ["missingkey=error"]
+
+          generators = [{
+            # Merge discovery (SCM) with per-workload params (List) on the repo
+            # name. SCM is the base set → discovery is authoritative; List adds
+            # registry + IRSA params for the workloads the operator has
+            # registered.
+            merge = {
+              mergeKeys = ["repository"]
+              generators = [
+                {
+                  scmProvider = {
+                    cloneProtocol = "https"
+                    github = {
+                      organization = "BinHsu"
+                      tokenRef = {
+                        secretName = kubernetes_secret.scm_token.metadata[0].name
+                        key        = "token"
+                      }
+                    }
+                    filters = [{
+                      # Two gates: the `aegis-workload` TOPIC (labelMatch is
+                      # topic-match for the github SCM provider) AND the repo's
+                      # own self-registration marker, argocd/application.yaml.
+                      # The marker is the repo's explicit opt-in — tagging alone
+                      # does not enrol it. (The marker file declares the
+                      # workload's ArgoCD intent; the effective Application is
+                      # RENDERED by this template, which injects region +
+                      # registry the repo cannot know — platform owns base +
+                      # policy, dev owns intent, per ADR-07. Authority split
+                      # flagged for review.)
+                      labelMatch = "aegis-workload"
+                      pathsExist = ["argocd/application.yaml", "k8s/overlays/prod"]
+                    }]
+                  }
+                },
+                {
+                  list = {
+                    elements = local.workload_list_elements
+                  }
+                },
+              ]
+            }
+          }]
+
+          template = {
+            metadata = {
+              name = "{{trimSuffix \"-deploy\" .repository}}"
+            }
+            spec = {
+              project = "aegis-workloads"
+              source = {
+                repoURL        = "{{.url}}"
+                targetRevision = "{{.branch}}"
+                path           = "k8s/overlays/prod"
+                kustomize = {
+                  # D4 account-ID hide — registry injected here, so deploy
+                  # repos carry only the bare `name:<tag>` image ref (no
+                  # account ID). newName only; the tag stays in the base
+                  # manifests where workload CI rewrites it.
+                  images = ["{{trimSuffix \"-deploy\" .repository}}={{.ecrAccountId}}.dkr.ecr.{{.ecrRegion}}.amazonaws.com/{{trimSuffix \"-deploy\" .repository}}"]
+                  # D3 region injection — a single generic annotation the
+                  # cluster knows. A region-aware workload (greeter) reads it
+                  # via its own kustomize replacements; the platform does not
+                  # know any workload's internal deployment/container names.
+                  commonAnnotations = {
+                    "aegis.binhsu.org/region" = var.region
+                  }
+                }
+              }
+              destination = {
+                server    = "https://kubernetes.default.svc"
+                namespace = "{{trimSuffix \"-deploy\" .repository}}"
+              }
+              syncPolicy = {
+                automated   = { prune = true, selfHeal = true }
+                syncOptions = ["CreateNamespace=true"]
+              }
+            }
+          }
+
+          # Conditional, account-bound injections (each keyed off an empty
+          # string so a workload that declares neither — e.g. greeter — renders
+          # nothing): the engine SA's role-arn annotation (pointing at the
+          # ACK-provisioned role in this account) and the gateway Ingress's ACM
+          # cert-arn (⑥ account-ID hide). Region is NOT here — it is
+          # workload-owned via the deploy repo's kustomize replacements.
+          templatePatch = <<-EOT
+            {{- if or .engineRoleArn .certArn }}
+            spec:
+              source:
+                kustomize:
+                  patches:
+                  {{- if .engineRoleArn }}
+                    - target:
+                        kind: ServiceAccount
+                        name: {{ .engineServiceAccount }}
+                      patch: |-
+                        - op: add
+                          path: /metadata/annotations/eks.amazonaws.com~1role-arn
+                          value: {{ .engineRoleArn }}
+                  {{- end }}
+                  {{- if .certArn }}
+                    - target:
+                        kind: Ingress
+                        name: {{ .ingressName }}
+                      patch: |-
+                        - op: add
+                          path: /metadata/annotations/alb.ingress.kubernetes.io~1certificate-arn
+                          value: {{ .certArn }}
+                  {{- end }}
+            {{- end }}
+          EOT
+        }
+      }
     })
   ]
 

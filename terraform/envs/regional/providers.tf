@@ -70,7 +70,7 @@ provider "helm" {
   }
 }
 
-provider "github" {
-  owner = "BinHsu"
-  token = var.github_token
-}
+# The github provider is gone — the module no longer mints per-workload deploy
+# keys (ADR-07 / D2). var.github_token is now passed through to the module as a
+# value (the SCM-generator's org-read token in a k8s Secret), not used to
+# configure a provider here.
