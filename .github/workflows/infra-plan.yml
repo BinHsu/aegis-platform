@@ -29,7 +29,7 @@ jobs:
     outputs:
       enabled_regions: ${{ steps.regions.outputs.list }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: regions
         name: extract enabled regions from regions.auto.tfvars.json
         run: |
@@ -41,7 +41,7 @@ jobs:
     name: gitleaks-secret-scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # full history so the scan sees every commit
       - name: gitleaks
@@ -60,7 +60,7 @@ jobs:
     name: fmt-validate-lint-sec
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.14.8
@@ -90,7 +90,7 @@ jobs:
     # failing on an unavoidable bootstrap-ordering gap.
     if: ${{ vars.BOOTSTRAP_COMPLETE == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.14.8
@@ -149,7 +149,7 @@ jobs:
       matrix:
         region: ${{ fromJson(needs.setup.outputs.enabled_regions) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.14.8
@@ -204,7 +204,7 @@ jobs:
     needs: [plan-platform, plan-regional]
     if: ${{ always() && github.event_name == 'pull_request' && vars.BOOTSTRAP_COMPLETE == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
           path: plans/
