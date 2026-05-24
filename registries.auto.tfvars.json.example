@@ -15,7 +15,14 @@
     "ServiceAccount needs an ACK-provisioned IAM role. The ApplicationSet",
     "injects the role-arn annotation, building the ARN from the cluster account",
     "(so no account ID is hardcoded in the public deploy repo). role_name must",
-    "match the path+name in the deploy repo's ACK Role CRD."
+    "match the path+name in the deploy repo's ACK Role CRD.",
+    "",
+    "ingress_cert is OPTIONAL — declare it for a workload with a TLS ALB",
+    "gateway. The ApplicationSet injects alb.ingress.kubernetes.io/certificate-arn",
+    "onto the named Ingress so the cert ARN (which embeds an account ID) stays",
+    "out of the public deploy repo. cert_arn must be a region-correct,",
+    "cluster-account ACM cert; a single value is single-region only (multi-region",
+    "wants a per-region lookup — E2E PENDING refinement)."
   ],
   "workload_registries": {
     "aegis-greeter-deploy": {
@@ -28,6 +35,10 @@
       "engine_irsa": {
         "service_account": "aegis-core-engine",
         "role_name": "aegis-workload/aegis-core-engine"
+      },
+      "ingress_cert": {
+        "ingress_name": "aegis-core-gateway",
+        "cert_arn": "arn:aws:acm:<region>:<cluster-account-id>:certificate/<cert-id>"
       }
     }
   }

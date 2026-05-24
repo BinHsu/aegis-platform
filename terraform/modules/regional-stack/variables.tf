@@ -60,6 +60,14 @@ variable "workload_registries" {
       service_account = string
       role_name       = string
     }))
+    # Account-bound (account ID in the ARN) → injected, kept out of the public
+    # deploy repo. The cert is per-(workload,region); a single value here is
+    # correct for one region — multi-region wants a per-region lookup (E2E
+    # PENDING refinement). The deploy repo drops its hardcoded cert-arn.
+    ingress_cert = optional(object({
+      ingress_name = string
+      cert_arn     = string
+    }))
   }))
   default = {}
 }

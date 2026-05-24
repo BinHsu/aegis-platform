@@ -80,26 +80,33 @@ resource "helm_release" "argocd" {
   depends_on = [kubernetes_secret.scm_token]
 }
 
-# Per-workload params the SCM generator cannot know: the ECR registry to inject
-# (account-ID hide, D4) and, for workloads that declare workload-scoped IAM,
-# the engine ServiceAccount + the ARN of the role ACK provisions for it. The
-# ACK-created role lives in THIS (the cluster/platform) account — built from
-# the caller identity, so no account ID is hardcoded in any public deploy repo
-# (it lives only in TF state + the in-cluster ApplicationSet). engine_irsa is
-# opt-in: greeter declares none.
+# Per-workload params the SCM generator cannot know — all ACCOUNT-bound or
+# cluster-bound (the values a public deploy repo must not hardcode):
+#   - the ECR registry to inject (account-ID hide, D4);
+#   - for workloads with IAM, the engine SA + the ARN of the ACK-provisioned
+#     role (built from the caller identity = the cluster/platform account, so
+#     no account ID lands in any public repo — it lives only in TF state + the
+#     in-cluster ApplicationSet);
+#   - for workloads with a TLS gateway, the ACM cert ARN to inject onto the
+#     Ingress (the cert ARN embeds an account ID — ⑥).
+# Region (workload INTENT, not account-bound) is deliberately NOT here — greeter
+# owns it via its own kustomize replacements off the injected region annotation.
+#
+# Every element carries every key (empty string when absent) so the
+# ApplicationSet template's `missingkey=error` stays safe while the
+# `{{- if ... }}` guards key off empty strings. engine_irsa / ingress_cert are
+# opt-in: greeter declares neither.
 locals {
   workload_list_elements = [
-    for repo, cfg in var.workload_registries : merge(
-      {
-        repository   = repo
-        ecrAccountId = cfg.ecr_account_id
-        ecrRegion    = cfg.ecr_region
-      },
-      cfg.engine_irsa == null ? {} : {
-        engineServiceAccount = cfg.engine_irsa.service_account
-        engineRoleArn        = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${cfg.engine_irsa.role_name}"
-      }
-    )
+    for repo, cfg in var.workload_registries : {
+      repository           = repo
+      ecrAccountId         = cfg.ecr_account_id
+      ecrRegion            = cfg.ecr_region
+      engineServiceAccount = try(cfg.engine_irsa.service_account, "")
+      engineRoleArn        = cfg.engine_irsa == null ? "" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${cfg.engine_irsa.role_name}"
+      ingressName          = try(cfg.ingress_cert.ingress_name, "")
+      certArn              = try(cfg.ingress_cert.cert_arn, "")
+    }
   ]
 }
 
@@ -227,16 +234,19 @@ resource "helm_release" "argocd_apps" {
             }
           }
 
-          # Conditional: only workloads that declared engine_irsa get the
-          # engine ServiceAccount's role-arn annotation injected (pointing at
-          # the ACK-provisioned role in this account). greeter has no IRSA →
-          # this renders to nothing for it.
+          # Conditional, account-bound injections (each keyed off an empty
+          # string so a workload that declares neither — e.g. greeter — renders
+          # nothing): the engine SA's role-arn annotation (pointing at the
+          # ACK-provisioned role in this account) and the gateway Ingress's ACM
+          # cert-arn (⑥ account-ID hide). Region is NOT here — it is
+          # workload-owned via the deploy repo's kustomize replacements.
           templatePatch = <<-EOT
-            {{- if .engineRoleArn }}
+            {{- if or .engineRoleArn .certArn }}
             spec:
               source:
                 kustomize:
                   patches:
+                  {{- if .engineRoleArn }}
                     - target:
                         kind: ServiceAccount
                         name: {{ .engineServiceAccount }}
@@ -244,6 +254,16 @@ resource "helm_release" "argocd_apps" {
                         - op: add
                           path: /metadata/annotations/eks.amazonaws.com~1role-arn
                           value: {{ .engineRoleArn }}
+                  {{- end }}
+                  {{- if .certArn }}
+                    - target:
+                        kind: Ingress
+                        name: {{ .ingressName }}
+                      patch: |-
+                        - op: add
+                          path: /metadata/annotations/alb.ingress.kubernetes.io~1certificate-arn
+                          value: {{ .certArn }}
+                  {{- end }}
             {{- end }}
           EOT
         }

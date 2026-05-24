@@ -137,6 +137,47 @@ consumer, per ADR-07), *not* from a god's-eye prediction of a future
 volume needs. We fix the contract those future workloads will *consume*; we do
 not pre-design their internals here (see the deferred forward-references below).
 
+## Multi-cloud: the contract is the portability unit, not the code
+
+The whole stack is **AWS-only today, and that is correct, not a gap.** The
+useful question for multi-cloud readiness is *not* "is the Terraform
+cloud-agnostic" (it cannot meaningfully be — provisioning EKS is intrinsically
+AWS) but "**is this contract crisp enough that a second cloud's platform tier
+could expose the same one**". The portability unit is the contract, not the
+implementation. Three layers, three different answers:
+
+- **Platform tier + landing zone — per-cloud by construction.** VPC, EKS, IRSA,
+  ACK, the ALB controller, external-dns→Route 53, ECR, the OIDC provider, AWS
+  Organizations + SCPs are all AWS-only. Multi-cloud does **not** mean making
+  these cloud-agnostic; it means a *parallel* per-cloud tier
+  (`aegis-platform-gcp`, …) that installs the same baseline (dimension (a)) and
+  therefore exposes the same five-dimension contract. The mechanism shifts by
+  cloud exactly as it shifts by isolation tier above; the contract holds. Even
+  adopting Crossplane would not change this — you would write AWS-specific
+  Crossplane resources instead of AWS-specific Terraform; only a hand-authored
+  XRD Composition abstracts across clouds, and that is the deferred abstraction.
+- **Workload deploy repos — mostly portable, with AWS-bound edges.** The core
+  manifests (Deployment/Rollout/Service/HPA/NetworkPolicy) are conformant K8s.
+  Only the *edges* are AWS-bound: the ALB `Ingress` annotations, the ACM cert
+  ARN, the ACK `Role` CRD, and the IRSA annotation. The multi-cloud workload
+  model is therefore **overlay-per-cloud inside one deploy repo**
+  (`overlays/prod-aws`, `overlays/prod-gcp`), **not** a forked repo-per-cloud —
+  the workload is the unit and its contract is cloud-invariant, so the deploy
+  repo name carries no cloud suffix (unlike the per-cloud substrate tiers, which
+  do). When a second cloud lands, the refactor is localised: extract the
+  cloud-specific edge files (`ingress.yaml`, `iam/`) into a per-cloud overlay,
+  and point that cloud's ApplicationSet at `overlays/prod-{{cloud}}`. This is a
+  bottom-up refactor driven by the second cloud's real requirements, not a
+  pre-built guess.
+- **App repos — cloud-agnostic.** The container is portable; nothing to do.
+
+The naming convention encodes this: **per-cloud substrate tiers carry a cloud
+suffix (`aegis-platform-aws`, `aegis-landing-zone-aws`); workload-side repos
+(app + deploy) do not**, because their contract is cloud-invariant. The single
+biggest portability lever, if multi-cloud ever becomes a goal, is adopting
+**Gateway API** for ingress (it decouples both deploy repos from EKS-specific
+ALB annotations) — tracked in [`docs/tradeoffs.md`](../tradeoffs.md).
+
 ## Deferred abstraction ladder — enforcement before ergonomics before UX
 
 The current control plane is **headless**: raw ACK CRDs + `ApplicationSet` + the
@@ -182,6 +223,17 @@ Re-evaluate the "abstraction deferred" stance when **any** of these becomes true
   back on hand-writing CRDs, or non-platform operators need to onboard without
   touching YAML → that is the **portal (Backstage) trigger**, distinct from the
   XRD trigger above.
+- **A second cloud goes live** — this is a *distinct* axis from the shape-based
+  XRD trigger above. [ADR-07](07-workload-self-ownership.md) rejected Crossplane
+  on the premise "single-cloud AWS → the multi-cloud abstraction is pure cost";
+  a second cloud flips that premise, so it is a real revisit trigger. But the
+  precise trigger is narrower than "multi-cloud" — it is the **conjunction**:
+  (1) a second cloud is live, AND (2) we want to keep the ACK self-service model
+  (workloads declare cloud resources as in-cluster CRDs), AND (3) ACK cannot
+  serve it because ACK is AWS-only. Only then does Crossplane earn its place (it
+  generalises the ACK pattern across clouds). "Two clouds, each managed by its
+  own Terraform" does **not** trigger it — Terraform is already multi-cloud. See
+  the multi-cloud section below.
 
 The session-close-review marker at the top of this file is the cheap
 cross-session stand-in for these triggers: re-count archetypes each session; if

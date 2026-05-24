@@ -73,6 +73,10 @@ variable "workload_registries" {
       service_account = string
       role_name       = string
     }))
+    ingress_cert = optional(object({
+      ingress_name = string
+      cert_arn     = string
+    }))
   }))
   default = {}
 }
