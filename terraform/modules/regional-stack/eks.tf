@@ -1,17 +1,17 @@
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.24"
+  version = "~> 21.0"
 
-  cluster_name    = local.cluster_name
-  cluster_version = var.cluster_version
+  name               = local.cluster_name
+  kubernetes_version = var.cluster_version
 
-  cluster_endpoint_public_access = true
-  enable_irsa                    = true
+  endpoint_public_access = true
+  enable_irsa            = true
 
   # All 5 control-plane log types → CloudWatch (audit / forensics
   # side-effect; never dashboarded). Per ADR-04 — CW retained
   # for audit only.
-  cluster_enabled_log_types = [
+  enabled_log_types = [
     "api",
     "audit",
     "authenticator",

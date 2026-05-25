@@ -61,7 +61,7 @@ resource "helm_release" "external_dns" {
 
   set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.irsa_external_dns.iam_role_arn
+    value = module.irsa_external_dns.arn
   }
 
   depends_on = [module.eks]

@@ -48,7 +48,7 @@ resource "helm_release" "ack_iam_controller" {
 
   set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.irsa_ack_iam.iam_role_arn
+    value = module.irsa_ack_iam.arn
   }
 
   depends_on = [module.eks]
