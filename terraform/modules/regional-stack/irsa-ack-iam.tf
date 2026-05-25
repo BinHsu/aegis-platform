@@ -94,14 +94,14 @@ resource "aws_iam_policy" "ack_iam" {
 }
 
 module "irsa_ack_iam" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
   # PREFIX is load-bearing — see the SCP coupling note above. Do not reorder
   # to put the region first without updating the fabric SCP glob.
-  role_name = "aegis-platform-ack-iam-${var.region}"
+  name = "aegis-platform-ack-iam-${var.region}"
 
-  role_policy_arns = {
+  policies = {
     ack = aws_iam_policy.ack_iam.arn
   }
 
