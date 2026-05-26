@@ -1,6 +1,6 @@
 {
   "title": "aegis-platform — infra (CloudWatch)",
-  "uid": "aegis-platform-infra-cw",
+  "uid": "aegis-platform-aws-infra-cw",
   "schemaVersion": 38,
   "version": 1,
   "tags": ["aegis-platform", "managed-by-terraform", "cloudwatch"],

@@ -2,7 +2,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 6.0"
 
-  name = "aegis-platform-${var.region}"
+  name = "aegis-platform-aws-${var.region}"
   cidr = var.vpc_cidr
 
   azs             = local.azs

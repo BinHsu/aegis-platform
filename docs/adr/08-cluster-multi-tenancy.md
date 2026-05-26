@@ -12,7 +12,7 @@ Accepted (2026-05-22).
 own `Application` CR, its own IAM CRDs, no PR to the platform repo. That
 answers *what a workload owns*. It does not answer *where a workload runs*.
 The unstated default in this repo so far has been "share the per-region EKS
-cluster `aegis-platform-${region}`", but the default has never been written
+cluster `aegis-platform-aws-${region}`", but the default has never been written
 down, and the escape hatch — what to do when a workload genuinely cannot
 share — has never been named.
 

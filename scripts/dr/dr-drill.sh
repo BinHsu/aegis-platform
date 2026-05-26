@@ -22,7 +22,7 @@ REGION="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-CLUSTER="aegis-platform-${REGION}"
+CLUSTER="aegis-platform-aws-${REGION}"
 EVIDENCE_DIR="docs/evidence"
 REPORT="${EVIDENCE_DIR}/DR_REPORT.md"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -91,7 +91,7 @@ echo "baseline OK — greeter readyReplicas=$ready"
 
 # Resolve each surviving region's greeter ALB for the failover probe.
 for s in $SURVIVORS; do
-  aws eks update-kubeconfig --name "aegis-platform-$s" --region "$s" --alias "$s" >/dev/null
+  aws eks update-kubeconfig --name "aegis-platform-aws-$s" --region "$s" --alias "$s" >/dev/null
   host="$(kubectl --context "$s" get ingress aegis-greeter -n greeter \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
   if [ -n "$host" ]; then

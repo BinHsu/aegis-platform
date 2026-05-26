@@ -105,7 +105,7 @@ data "aws_iam_policy_document" "infra_ci_trust" {
 }
 
 resource "aws_iam_role" "infra_ci" {
-  name               = "aegis-platform-ci"
+  name               = "aegis-platform-aws-ci"
   assume_role_policy = data.aws_iam_policy_document.infra_ci_trust.json
 }
 
@@ -150,7 +150,7 @@ data "aws_iam_policy_document" "infra_apply_trust" {
 }
 
 resource "aws_iam_role" "infra_apply" {
-  name               = "aegis-platform-apply"
+  name               = "aegis-platform-aws-apply"
   assume_role_policy = data.aws_iam_policy_document.infra_apply_trust.json
 }
 

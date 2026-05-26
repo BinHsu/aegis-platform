@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REGION="${1:?usage: pre-destroy.sh <region>}"
-CLUSTER="aegis-platform-${REGION}"
+CLUSTER="aegis-platform-aws-${REGION}"
 
 if ! aws eks describe-cluster --name "$CLUSTER" --region "$REGION" >/dev/null 2>&1; then
   echo "pre-destroy: cluster $CLUSTER not found — nothing to clean, skipping."

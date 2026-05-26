@@ -20,7 +20,7 @@ After apply, the Makefile reads the `backend_hcl` output and writes a `backend.h
 
 | Resource | Why |
 |---|---|
-| S3 bucket `aegis-platform-tfstate-${account_id}` | Remote state for platform + regional. Versioned + SSE-KMS (`alias/aws/s3`) + Block Public Access. Lock files live at `<state_key>.tflock` in the same bucket (TF ≥ 1.11 native locking via PutObject IfNoneMatch). |
+| S3 bucket `aegis-platform-aws-tfstate-${account_id}` | Remote state for platform + regional. Versioned + SSE-KMS (`alias/aws/s3`) + Block Public Access. Lock files live at `<state_key>.tflock` in the same bucket (TF ≥ 1.11 native locking via PutObject IfNoneMatch). |
 
 ## Production hardening (out of scope, documented in tradeoffs)
 
