@@ -6,7 +6,7 @@ variable "platform_region" {
 variable "bucket_prefix" {
   description = "Prefix for the global-unique S3 state bucket. Actual name is '<bucket_prefix>-<account_id>' computed in main.tf."
   type        = string
-  default     = "aegis-platform-tfstate"
+  default     = "aegis-platform-aws-tfstate"
 }
 
 variable "project_tag" {

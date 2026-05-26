@@ -19,7 +19,7 @@ provider "aws" {
       Env        = "regional"
       Region     = var.region
       ManagedBy  = "terraform"
-      Repo       = "github.com/BinHsu/aegis-platform"
+      Repo       = "github.com/BinHsu/aegis-platform-aws"
       CostCenter = var.cost_center_tag
     }
   }
@@ -37,7 +37,7 @@ provider "aws" {
       Env        = "regional"
       Region     = var.region
       ManagedBy  = "terraform"
-      Repo       = "github.com/BinHsu/aegis-platform"
+      Repo       = "github.com/BinHsu/aegis-platform-aws"
       CostCenter = var.cost_center_tag
     }
   }

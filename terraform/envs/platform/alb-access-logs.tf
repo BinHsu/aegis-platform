@@ -4,7 +4,7 @@
 # scraped or dashboarded; pulled into Athena only on incident need.
 
 locals {
-  alb_access_logs_bucket_name = "aegis-platform-alb-access-logs-${data.aws_caller_identity.current.account_id}"
+  alb_access_logs_bucket_name = "aegis-platform-aws-alb-access-logs-${data.aws_caller_identity.current.account_id}"
 }
 
 # This IS the access-log bucket — meta-logging it would recurse

@@ -9,8 +9,8 @@
 # │ management/scps) denies iam:CreateRole/etc org-wide except an           │
 # │ ArnNotLike allow-list. The ACK controller cannot `iam:CreateRole` from  │
 # │ the CRDs at all unless its principal ARN is carved out. The carve-out   │
-# │ added there is the PREFIX glob `arn:aws:iam::*:role/aegis-platform-ack- │
-# │ iam-*`, so this role MUST keep the `aegis-platform-ack-iam-` prefix.    │
+# │ added there is the PREFIX glob `arn:aws:iam::*:role/aegis-platform-aws-ack- │
+# │ iam-*`, so this role MUST keep the `aegis-platform-aws-ack-iam-` prefix.    │
 # │ Region is the suffix (matches the existing alb/external-dns naming),    │
 # │ which is why the SCP uses a prefix glob, not the suffix glob the        │
 # │ karpenter entry uses. See ADR-07 enforcement three-pack #3.             │
@@ -29,7 +29,7 @@ data "aws_caller_identity" "current" {}
 # fails — so ACK physically cannot touch platform/CI/break-glass roles, only
 # the workload roles it is meant to provision.
 resource "aws_iam_policy" "ack_iam" {
-  name        = "aegis-platform-ack-iam-${var.region}"
+  name        = "aegis-platform-aws-ack-iam-${var.region}"
   description = "Scoped IAM-management permissions for the ACK IAM controller. Limited to the /aegis-workload/ path so ACK can only manage workload-declared roles, never platform/CI/break-glass identities. E2E PENDING bootstrap."
 
   policy = jsonencode({
@@ -99,7 +99,7 @@ module "irsa_ack_iam" {
 
   # PREFIX is load-bearing — see the SCP coupling note above. Do not reorder
   # to put the region first without updating the fabric SCP glob.
-  name = "aegis-platform-ack-iam-${var.region}"
+  name = "aegis-platform-aws-ack-iam-${var.region}"
 
   policies = {
     ack = aws_iam_policy.ack_iam.arn

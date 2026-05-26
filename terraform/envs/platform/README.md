@@ -40,26 +40,26 @@ All marked `sensitive = true` in `variables.tf`; not echoed in `terraform plan` 
 `infra-plan.yml` and `infra-apply.yml` read equivalent values from GH Actions secrets. Set once per repo:
 
 ```bash
-gh secret set GRAFANA_CLOUD_API_TOKEN              -b "glc_..."            --repo BinHsu/aegis-platform
-gh secret set GRAFANA_AUTH_TOKEN                   -b "glsa_..."           --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_MIMIR_USERNAME     -b "<mimir-instance-id>"     --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_LOKI_USERNAME      -b "<loki-instance-id>"      --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_TEMPO_USERNAME     -b "<tempo-instance-id>"     --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_PYROSCOPE_USERNAME -b "<pyroscope-instance-id>" --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_MIMIR_URL              -b "https://prometheus-prod-XX-..."  --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_LOKI_URL               -b "https://logs-prod-XXX-..."       --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_TEMPO_URL              -b "https://tempo-prod-XX-..."       --repo BinHsu/aegis-platform
-gh secret set GRAFANA_CLOUD_PYROSCOPE_URL          -b "https://profiles-prod-XXX-..."   --repo BinHsu/aegis-platform
-gh secret set BUDGET_ALERT_EMAIL                   -b "ops@example.com"    --repo BinHsu/aegis-platform
-gh secret set GH_DEPLOY_KEY_PAT                    -b "github_pat_..."     --repo BinHsu/aegis-platform
+gh secret set GRAFANA_CLOUD_API_TOKEN              -b "glc_..."            --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_AUTH_TOKEN                   -b "glsa_..."           --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_MIMIR_USERNAME     -b "<mimir-instance-id>"     --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_LOKI_USERNAME      -b "<loki-instance-id>"      --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_TEMPO_USERNAME     -b "<tempo-instance-id>"     --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_PYROSCOPE_USERNAME -b "<pyroscope-instance-id>" --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_MIMIR_URL              -b "https://prometheus-prod-XX-..."  --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_LOKI_URL               -b "https://logs-prod-XXX-..."       --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_TEMPO_URL              -b "https://tempo-prod-XX-..."       --repo BinHsu/aegis-platform-aws
+gh secret set GRAFANA_CLOUD_PYROSCOPE_URL          -b "https://profiles-prod-XXX-..."   --repo BinHsu/aegis-platform-aws
+gh secret set BUDGET_ALERT_EMAIL                   -b "ops@example.com"    --repo BinHsu/aegis-platform-aws
+gh secret set GH_DEPLOY_KEY_PAT                    -b "github_pat_..."     --repo BinHsu/aegis-platform-aws
 
 # Set after running `make bootstrap` once (capture from `terraform output`):
-gh secret set TFSTATE_BUCKET                       -b "aegis-platform-tfstate-<acct-id>" --repo BinHsu/aegis-platform
-gh secret set TFSTATE_REGION                       -b "eu-central-1"       --repo BinHsu/aegis-platform
+gh secret set TFSTATE_BUCKET                       -b "aegis-platform-aws-tfstate-<acct-id>" --repo BinHsu/aegis-platform-aws
+gh secret set TFSTATE_REGION                       -b "eu-central-1"       --repo BinHsu/aegis-platform-aws
 
 # Set after applying platform once (capture from `terraform output`):
-gh secret set AWS_INFRA_CI_ROLE_ARN                -b "arn:aws:iam::<acct>:role/aegis-platform-ci"    --repo BinHsu/aegis-platform
-gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/aegis-platform-apply" --repo BinHsu/aegis-platform
+gh secret set AWS_INFRA_CI_ROLE_ARN                -b "arn:aws:iam::<acct>:role/aegis-platform-aws-ci"    --repo BinHsu/aegis-platform-aws
+gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/aegis-platform-aws-apply" --repo BinHsu/aegis-platform-aws
 ```
 
 ## CI bootstrap gate — `BOOTSTRAP_COMPLETE`
@@ -69,7 +69,7 @@ gh secret set AWS_INFRA_APPLY_ROLE_ARN             -b "arn:aws:iam::<acct>:role/
 After the operator has run `make bootstrap` + `make platform` locally (so the roles + OIDC provider exist) and set all the secrets above:
 
 ```bash
-gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform
+gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform-aws
 ```
 
 From then on, `infra-plan` plans and `infra-apply` applies on every push to `main`. Before it, only `gitleaks` + `fmt/validate/lint/sec` + k8s-manifest validation run (and pass) — the plan/apply jobs show as `skipped`.

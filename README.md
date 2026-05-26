@@ -176,7 +176,7 @@ gh variable set OIDC_ROLE_ARN -b "$(terraform -chdir=terraform/envs/platform out
 gh variable set AWS_REGION    -b "$(terraform -chdir=terraform/envs/platform output -raw aws_region)"          --repo BinHsu/aegis-greeter
 
 # Flip the CI bootstrap gate — infra-plan/infra-apply plan/apply jobs un-skip.
-gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform
+gh variable set BOOTSTRAP_COMPLETE -b "true" --repo BinHsu/aegis-platform-aws
 ```
 
 ### Publish the first workload image — cross-repo step
@@ -191,7 +191,7 @@ ArgoCD then reconciles the new tag and the pods reach `Running`.
 ### Verify
 
 ```bash
-aws eks update-kubeconfig --name aegis-platform-eu-central-1 --region eu-central-1
+aws eks update-kubeconfig --name aegis-platform-aws-eu-central-1 --region eu-central-1
 kubectl get applications -n argocd   # one Application per workload, Synced + Healthy
 kubectl get pods -n argocd           # ArgoCD healthy
 kubectl get pods -n monitoring       # Alloy + node-exporter + kube-state-metrics

@@ -3,7 +3,7 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  cluster_name = "aegis-platform-${var.region}"
+  cluster_name = "aegis-platform-aws-${var.region}"
 
   azs = slice(data.aws_availability_zones.available.names, 0, 3)
 
@@ -16,7 +16,7 @@ locals {
     Env        = "regional"
     Region     = var.region
     ManagedBy  = "terraform"
-    Repo       = "github.com/BinHsu/aegis-platform"
+    Repo       = "github.com/BinHsu/aegis-platform-aws"
     CostCenter = var.cost_center_tag
   }
 }
