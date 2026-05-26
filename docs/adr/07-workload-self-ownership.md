@@ -39,7 +39,7 @@ recorded: **[ldz ADR-017](https://github.com/BinHsu/aegis-aws-landing-zone/blob/
 descoped the landing zone to account-fabric-only and extracted the platform
 tier into this repo. ldz ADR-017's own consequence — "per-workload IRSA roles
 do not live in the landing zone; they are provisioned by the workload per
-aegis-platform ADR-07" — forward-references this ADR. This ADR is the
+aegis-platform-aws ADR-07" — forward-references this ADR. This ADR is the
 consumer-side half of that decision: the per-workload role the fabric does not
 own is *created* in the workload's deploy repo (not migrated — there is no
 working fabric role to migrate).
@@ -147,7 +147,7 @@ At the current scale — one solo operator (plus an agent) — the same actor we
 the platform hat *and* the workload hat. The marquee benefit of this ADR
 (self-service onboarding with zero platform-team PR) is therefore **latent, not
 realized**: there is no second team to be unblocked, so "zero PR to
-aegis-platform" saves the operator a context switch, not a cross-team handoff.
+aegis-platform-aws" saves the operator a context switch, not a cross-team handoff.
 
 The honest reason to adopt this now is **technical, not organizational**:
 
@@ -189,7 +189,7 @@ real technical benefits in the meantime.
 - Onboarding a new workload becomes self-service. Create the deploy repo, tag
   it with the GitHub topic `aegis-workload`, declare
   `argocd/application.yaml` and `k8s/base/iam/*.yaml`. Zero PR to
-  `aegis-platform`, zero PR to `aegis-aws-landing-zone`.
+  `aegis-platform-aws`, zero PR to `aegis-aws-landing-zone`.
 - The platform tier narrows to **paved-road provider**: EKS, the ArgoCD root
   + `ApplicationSet`, the ACK IAM controller, cert-manager, the ALB
   controller, the Alloy DaemonSet, the observability wiring. It stops being
@@ -217,7 +217,7 @@ is the simplest workload, already deployed, and exercises the full interface
 greeter, *then* apply it to the more complex `aegis-core` engine, *then* tear
 down the fabric's now-orphaned role.
 
-1. **`aegis-platform`** — install the ACK IAM controller in
+1. **`aegis-platform-aws`** — install the ACK IAM controller in
    `modules/regional-stack`; replace `for_each var.workloads` with one
    `ApplicationSet` resource (+ the `AppProject` allowlist and Kyverno
    trust-subject policy from the enforcement three-pack); delete

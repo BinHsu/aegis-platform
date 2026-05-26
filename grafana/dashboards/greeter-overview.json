@@ -3,7 +3,7 @@
   "uid": "aegis-greeter-overview",
   "schemaVersion": 38,
   "version": 5,
-  "tags": ["aegis-platform", "managed-by-terraform"],
+  "tags": ["aegis-platform-aws", "managed-by-terraform"],
   "time": { "from": "now-6h", "to": "now" },
   "refresh": "30s",
   "templating": {

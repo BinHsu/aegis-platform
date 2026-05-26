@@ -1,4 +1,4 @@
-# aegis-platform — Makefile
+# aegis-platform-aws — Makefile
 #
 # Local dev + CI-driven backbone. Canonical apply pipeline is GH Actions
 # (infra-plan.yml on PR + infra-apply.yml on push-to-main + infra-ops.yml

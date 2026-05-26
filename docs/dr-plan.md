@@ -1,6 +1,6 @@
 # Disaster recovery plan
 
-How `aegis-platform` recovers from failure, what it targets, and how a drill
+How `aegis-platform-aws` recovers from failure, what it targets, and how a drill
 proves it. This is the *plan*; running `scripts/dr/dr-drill.sh` writes the
 drill's timed evidence to `evidence/`.
 
