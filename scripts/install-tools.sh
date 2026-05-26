@@ -12,7 +12,7 @@
 # scope): cosign / GPG signature verification of the checksums file itself;
 # see docs/tradeoffs.md.
 #
-# aegis-platform is the platform tier — Terraform + CI only. It carries no
+# aegis-platform-aws is the platform tier — Terraform + CI only. It carries no
 # Kubernetes manifests (those live in the per-workload deploy repos) and no
 # Dockerfile, so the toolchain is tflint / tfsec / jq / gitleaks. It does not
 # install kubeconform / kustomize (manifest validation belongs in the deploy

@@ -13,8 +13,8 @@ data "grafana_data_source" "prometheus" {
 
 # ---- folder ---------------------------------------------------------------
 resource "grafana_folder" "aegis_stateless" {
-  title = "aegis-platform"
-  uid   = "aegis-platform"
+  title = "aegis-platform-aws"
+  uid   = "aegis-platform-aws"
 }
 
 # ---- dashboards -----------------------------------------------------------
@@ -456,7 +456,7 @@ resource "grafana_rule_group" "node_memory_pressure" {
     }
 
     annotations = {
-      summary          = "an aegis-platform node in {{ $labels.region }} exceeded 85% memory utilization over 5 min"
+      summary          = "an aegis-platform-aws node in {{ $labels.region }} exceeded 85% memory utilization over 5 min"
       __dashboardUid__ = grafana_dashboard.greeter_overview.uid
       __panelId__      = "9"
     }

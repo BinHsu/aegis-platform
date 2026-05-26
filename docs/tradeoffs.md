@@ -278,7 +278,7 @@ larger setup would add:
 This whole stack is **AWS-only today, by design** — not by accident. The split
 matters (see [ADR-08](adr/08-cluster-multi-tenancy.md), "Multi-cloud"):
 
-- **Platform tier (`aegis-platform`) + landing zone are per-cloud by
+- **Platform tier (`aegis-platform-aws`) + landing zone are per-cloud by
   construction** (VPC/EKS/IRSA/ACK/Route 53/ECR/Organizations/SCPs). Multi-cloud
   does **not** mean making these cloud-agnostic — it means a parallel per-cloud
   tier exposing the *same contract* (the ADR-08 five-dimension invariant). The

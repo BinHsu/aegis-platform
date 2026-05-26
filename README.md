@@ -1,10 +1,10 @@
-# aegis-platform
+# aegis-platform-aws
 
 The platform tier for a fleet of Kubernetes workloads on AWS — Terraform for the
 cloud substrate, per-cluster ArgoCD for in-cluster GitOps, Grafana Cloud for
 observability, and a DR drill that rebuilds a region from git.
 
-`aegis-platform` is shared infrastructure. It provisions the EKS clusters and
+`aegis-platform-aws` is shared infrastructure. It provisions the EKS clusters and
 runs the ArgoCD that reconciles **workload deploy repos** onto them. It owns no
 application code and no Kubernetes manifests — those live in their own repos:
 
@@ -41,7 +41,7 @@ flowchart TB
     subgraph deploy_repo["deploy repo · e.g. aegis-greeter_deploy"]
         kust["k8s/overlays/prod/kustomization.yaml"]
     end
-    subgraph this_repo["aegis-platform — this repo"]
+    subgraph this_repo["aegis-platform-aws — this repo"]
         tf["terraform/ · bootstrap / platform / regional"]
         argocd["ArgoCD ApplicationSet · per cluster"]
         ack["ACK IAM controller · Kyverno guardrails"]

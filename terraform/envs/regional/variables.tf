@@ -85,7 +85,7 @@ variable "workload_registries" {
 variable "project_tag" {
   description = "Value of the Project tag applied to all resources."
   type        = string
-  default     = "aegis-platform"
+  default     = "aegis-platform-aws"
 }
 
 variable "cost_center_tag" {

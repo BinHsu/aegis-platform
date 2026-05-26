@@ -19,7 +19,7 @@ resource "github_branch_protection" "main" {
   # Pro. See docs/tradeoffs.md.
   count = var.enable_branch_protection ? 1 : 0
 
-  repository_id = "aegis-platform"
+  repository_id = "aegis-platform-aws"
   pattern       = "main"
 
   # Status check gate — infra-plan workflow's summary job must pass before
